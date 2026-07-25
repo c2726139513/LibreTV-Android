@@ -45,7 +45,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LibreTV-APK-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release-*.apk
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
   release:
@@ -63,5 +63,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: apk/app-release-*.apk
+          files: apk/*.apk
           generate_release_notes: true
