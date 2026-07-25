@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LibreTV</string>
+    <string name="search_title">搜索</string>
+    <string name="settings_title">设置</string>
+    <string name="server_list_title">我的服务器</string>
+    <string name="continue_watching">继续观看</string>
+    <string name="favorites">收藏</string>
+    <string name="add_server">添加服务器</string>
+    <string name="edit_server">编辑服务器</string>
+    <string name="delete_server">删除服务器</string>
+    <string name="server_url_hint">服务器地址</string>
+    <string name="server_password_hint">密码</string>
+    <string name="server_name_hint">服务器名称</string>
+    <string name="cms_source_hint">CMS 源地址（可选）</string>
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+    <string name="play">播放</string>
+    <string name="no_results">暂无结果</string>
+    <string name="loading">加载中…</string>
+    <string name="search_hint">搜索视频名称</string>
+    <string name="error_no_server">请先在设置中添加服务器</string>
+    <string name="error_network">网络错误</string>
+    <string name="error_auth">鉴权失败，请检查密码</string>
+    <string name="confirm_delete">确认删除此服务器？</string>
+    <string name="confirm_clear_history">确认清除所有播放历史？</string>
+    <string name="server_connected">连接成功</string>
+    <string name="server_disconnected">连接失败</string>
+</resources>

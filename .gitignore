@@ -1,0 +1,56 @@
+# --- 签名凭证（含敏感信息，严禁提交） ---
+SIGNING_CREDENTIALS.txt
+*.jks
+*.keystore
+*.jks.b64
+keystore.properties
+signing.properties
+
+# --- Gradle ---
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# --- 本地开发环境配置 ---
+.omo/
+.navight/
+
+# --- IDE ---
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.navight/
+.DS_Store
+
+# --- Android / IntelliJ ---
+local.properties
+*.log
+*.hprof
+*.class
+*.dex
+*.ap_
+*.aab
+*.apk
+*.aa
+captures/
+.externalNativeBuild/
+.cxx/
+*.cxx
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- Misc ---
+*.backup
+*.bak
