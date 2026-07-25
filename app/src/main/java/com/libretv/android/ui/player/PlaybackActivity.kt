@@ -54,14 +54,15 @@ class PlaybackActivity : ComponentActivity() {
                 .setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
                         .setTitle(videoTitle)
-                        .setSubTitle(episodeName)
+                        .setSubtitle(episodeName)
                         .build()
                 )
                 .build()
 
-            val mediaSource = ProxyMediaSource.create(mediaItem) {
-                serverConfigProvider()
-            }
+            val mediaSource = ProxyMediaSource.create(
+                mediaItem = mediaItem,
+                serverConfigProvider = serverConfigProvider
+            )
 
             setMediaSource(mediaSource)
             prepare()

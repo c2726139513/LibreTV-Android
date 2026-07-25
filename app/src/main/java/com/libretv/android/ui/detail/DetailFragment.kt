@@ -83,7 +83,7 @@ class DetailFragment : DetailsSupportFragment() {
 
         // Episodes row
         if (video.episodes.isNotEmpty()) {
-            val episodeHeader = HeaderItem("episodes", "剧集列表")
+            val episodeHeader = HeaderItem("剧集列表")
             val episodePresenter = CardPresenter()
             val episodeAdapter = ArrayObjectAdapter(episodePresenter)
             for (episode in video.episodes) {

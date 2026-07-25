@@ -7,6 +7,7 @@ import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
+import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -26,17 +27,16 @@ class SearchFragment : SearchSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setSearchIcon(null)
         setBadgeDrawable(null)
         setTitle(getString(R.string.search_title))
-        setOnItemViewClickedListener { itemViewHolder, item, rowViewHolder, row ->
+        onItemViewClickedListener = OnItemViewClickedListener { _, item, _, _ ->
             if (item is VideoItem) {
                 Router.navigateToDetail(requireActivity(), item.vodId, item.title, item.coverUrl)
             }
         }
 
         // Set up search results adapter
-        setAdapter(rowsAdapter)
+        setResultAdapter(rowsAdapter)
 
         // Handle search queries
         setOnQueryTextListener(object : SearchSupportFragment.OnQueryTextListener {
@@ -81,7 +81,7 @@ class SearchFragment : SearchSupportFragment() {
     private fun updateResults(results: List<VideoItem>) {
         rowsAdapter.clear()
         if (results.isNotEmpty()) {
-            val header = HeaderItem("results", "搜索结果")
+            val header = HeaderItem("搜索结果")
             val cardPresenter = CardPresenter()
             val adapter = ArrayObjectAdapter(cardPresenter)
             for (item in results) {

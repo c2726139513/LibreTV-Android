@@ -98,7 +98,7 @@ class BrowseFragment : BrowseSupportFragment() {
         removeRowWithHeader("继续观看")
 
         if (history.isNotEmpty()) {
-            val header = HeaderItem("continue_watching", getString(R.string.continue_watching))
+            val header = HeaderItem(getString(R.string.continue_watching))
             val cardPresenter = CardPresenter()
             val adapter = ArrayObjectAdapter(cardPresenter)
             for (item in history) {
@@ -112,7 +112,7 @@ class BrowseFragment : BrowseSupportFragment() {
         removeRowsWithPrefix("server_")
 
         servers.forEachIndexed { index, server ->
-            val header = HeaderItem("server_${server.id}", server.name)
+            val header = HeaderItem(server.name)
             val cardPresenter = CardPresenter()
             val adapter = ArrayObjectAdapter(cardPresenter)
             // Placeholder: server content will be loaded in a future iteration
