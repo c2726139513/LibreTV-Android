@@ -41,13 +41,7 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
         resultsGrid = view.findViewById(R.id.search_results)
         emptyText = view.findViewById(R.id.search_empty)
 
-        val bridgeAdapter = ItemBridgeAdapter(rowsAdapter)
-        bridgeAdapter.setOnItemViewClickedListener { _, item, _, _ ->
-            if (item is VideoItem) {
-                Router.navigateToDetail(requireActivity(), item.vodId, item.title, item.coverUrl)
-            }
-        }
-        resultsGrid.adapter = bridgeAdapter
+        resultsGrid.adapter = ItemBridgeAdapter(rowsAdapter)
 
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
@@ -83,8 +77,12 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
     private fun updateResults(results: List<VideoItem>) {
         rowsAdapter.clear()
         if (results.isNotEmpty()) {
-            val header = HeaderItem("搜索结果")
-            val cardPresenter = CardPresenter()
+            val header = HeaderItem(0, "搜索结果")
+            val cardPresenter = CardPresenter { item ->
+                if (item is VideoItem) {
+                    Router.navigateToDetail(requireActivity(), item.vodId, item.title, item.coverUrl)
+                }
+            }
             val adapter = ArrayObjectAdapter(cardPresenter)
             for (item in results) {
                 adapter.add(item)

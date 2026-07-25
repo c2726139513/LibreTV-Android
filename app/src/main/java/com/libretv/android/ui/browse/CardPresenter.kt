@@ -1,5 +1,6 @@
 package com.libretv.android.ui.browse
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.res.ResourcesCompat
 import androidx.leanback.widget.ImageCardView
@@ -8,7 +9,9 @@ import com.libretv.android.R
 import com.libretv.android.data.local.WatchHistoryItem
 import com.libretv.android.model.VideoItem
 
-class CardPresenter : Presenter() {
+class CardPresenter(
+    private val onItemClickListener: ((Any) -> Unit)? = null
+) : Presenter() {
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         val cardView = ImageCardView(parent.context).apply {
@@ -30,13 +33,17 @@ class CardPresenter : Presenter() {
             is VideoItem -> {
                 cardView.titleText = item.title
                 cardView.contentText = item.remarks ?: item.year ?: ""
-                // In production, load image with Coil:
-                // CoilImageLoader.load(cardView.context, item.coverUrl, cardView)
             }
             is WatchHistoryItem -> {
                 cardView.titleText = item.title
                 cardView.contentText = item.sourceName ?: ""
             }
+        }
+
+        if (onItemClickListener != null) {
+            cardView.setOnClickListener { onItemClickListener(item) }
+        } else {
+            cardView.setOnClickListener(null)
         }
     }
 
@@ -44,6 +51,7 @@ class CardPresenter : Presenter() {
         val cardView = viewHolder.view as ImageCardView
         cardView.badgeImage = null
         cardView.mainImage = null
+        cardView.setOnClickListener(null)
     }
 
     companion object {
