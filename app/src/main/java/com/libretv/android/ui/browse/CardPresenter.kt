@@ -1,6 +1,5 @@
 package com.libretv.android.ui.browse
 
-import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.res.ResourcesCompat
 import androidx.leanback.widget.ImageCardView
@@ -40,11 +39,7 @@ class CardPresenter(
             }
         }
 
-        if (onItemClickListener != null) {
-            cardView.setOnClickListener { onItemClickListener(item) }
-        } else {
-            cardView.setOnClickListener(null)
-        }
+        cardView.setOnClickListener { onItemClickListener?.invoke(item) }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
