@@ -11,6 +11,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.HeaderItem
+import androidx.leanback.widget.ItemBridgeAdapter
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.VerticalGridView
@@ -40,7 +41,13 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
         resultsGrid = view.findViewById(R.id.search_results)
         emptyText = view.findViewById(R.id.search_empty)
 
-        resultsGrid.adapter = rowsAdapter
+        val bridgeAdapter = ItemBridgeAdapter(rowsAdapter)
+        bridgeAdapter.setOnItemViewClickedListener { _, item, _, _ ->
+            if (item is VideoItem) {
+                Router.navigateToDetail(requireActivity(), item.vodId, item.title, item.coverUrl)
+            }
+        }
+        resultsGrid.adapter = bridgeAdapter
 
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
