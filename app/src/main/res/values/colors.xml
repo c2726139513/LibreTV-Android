@@ -1,7 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="search_bg">#FF000000</color>
-    <color name="search_input_bg">#FF333333</color>
-    <color name="search_hint">#FF888888</color>
-    <color name="search_button_bg">#FF1E90FF</color>
+    <color name="bg_primary">#FF0D0D0D</color>
+    <color name="bg_dialog">#FF1C1C1C</color>
+    <color name="bg_card">#FF1A1A2E</color>
+    <color name="bg_input">#FF2A2A2A</color>
+    <color name="bg_button">#FF1E90FF</color>
+
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFAAAAAA</color>
+    <color name="text_hint">#FF666666</color>
+
+    <color name="accent">#FF1E90FF</color>
+    <color name="accent_dark">#FF1565C0</color>
+
+    <color name="success">#FF4CAF50</color>
+    <color name="error">#FFEF5350</color>
+    <color name="warning">#FFFFA726</color>
+
+    <color name="search_bg">@color/bg_primary</color>
+    <color name="search_input_bg">@color/bg_input</color>
+    <color name="search_hint">@color/text_hint</color>
+    <color name="search_button_bg">@color/bg_button</color>
 </resources>

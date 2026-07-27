@@ -1,5 +1,6 @@
 package com.vidhub.android.ui.browse
 
+import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
 import androidx.core.content.res.ResourcesCompat
 import androidx.leanback.widget.ImageCardView
@@ -18,11 +19,9 @@ class CardPresenter(
         val cardView = ImageCardView(parent.context).apply {
             isFocusable = true
             isFocusableInTouchMode = true
-            setBackgroundColor(
-                ResourcesCompat.getColor(resources, android.R.color.black, null)
-            )
             cardType = ImageCardView.CARD_TYPE_INFO_UNDER
             setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
+            setBackgroundColor(0xFF1A1A2E.toInt())
         }
         return ViewHolder(cardView)
     }
@@ -60,7 +59,7 @@ class CardPresenter(
     }
 
     companion object {
-        private const val CARD_WIDTH = 320
-        private const val CARD_HEIGHT = 180
+        private const val CARD_WIDTH = 350
+        private const val CARD_HEIGHT = 200
     }
 }
