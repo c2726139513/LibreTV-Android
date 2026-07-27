@@ -1,8 +1,9 @@
 package com.libretv.android.data.local
 
 import android.content.Context
-import com.libretv.android.model.VideoItem
 import com.libretv.android.util.Constants
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
@@ -12,17 +13,18 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.lang.reflect.ParameterizedType
 
+@JsonClass(generateAdapter = true)
 data class WatchHistoryItem(
-    val videoId: String,
-    val title: String,
-    val coverUrl: String?,
-    val serverId: String,
-    val episodeIndex: Int,
-    val episodeName: String?,
-    val position: Long,
-    val duration: Long,
-    val lastWatched: Long,
-    val sourceName: String?
+    @Json(name = "videoId") val videoId: String,
+    @Json(name = "title") val title: String,
+    @Json(name = "coverUrl") val coverUrl: String?,
+    @Json(name = "serverId") val serverId: String,
+    @Json(name = "episodeIndex") val episodeIndex: Int,
+    @Json(name = "episodeName") val episodeName: String?,
+    @Json(name = "position") val position: Long,
+    @Json(name = "duration") val duration: Long,
+    @Json(name = "lastWatched") val lastWatched: Long,
+    @Json(name = "sourceName") val sourceName: String?
 )
 
 class WatchHistoryStore(private val context: Context) {
