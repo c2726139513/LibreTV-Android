@@ -13,6 +13,7 @@ import com.vidhub.android.model.VideoItem
 import android.util.Log
 import com.vidhub.android.util.Sha256
 import kotlinx.coroutines.flow.Flow
+import java.io.IOException
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -59,9 +60,12 @@ class VideoRepository @Inject constructor(
                 Log.w("VideoRepository", "/api/sources returned code=${response.code}: $msg")
                 FetchSourcesResult.Error(msg)
             }
-        } catch (e: Exception) {
-            Log.e("VideoRepository", "fetchSources failed", e)
+        } catch (e: IOException) {
+            Log.e("VideoRepository", "fetchSources network error", e)
             FetchSourcesResult.Error("网络错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
+        } catch (e: Exception) {
+            Log.e("VideoRepository", "fetchSources unexpected error", e)
+            FetchSourcesResult.Error("数据解析错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
         }
     }
 
