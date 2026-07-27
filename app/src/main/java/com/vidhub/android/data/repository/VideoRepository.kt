@@ -7,6 +7,8 @@ import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.vidhub.android.data.remote.VidHubApi
+import com.vidhub.android.data.remote.dto.DetailResponse
+import com.vidhub.android.data.remote.dto.SearchResponse
 import com.vidhub.android.data.remote.dto.SourceInfo
 import com.vidhub.android.data.remote.dto.SourcesResponse
 import com.vidhub.android.data.remote.dto.toVideoItem
@@ -41,6 +43,12 @@ class VideoRepository @Inject constructor(
     // In-memory cache of server source lists (keyed by server URL)
     private var sourcesCache: Map<String, List<SourceInfo>> = emptyMap()
 
+    private val jsonMoshi: Moshi by lazy {
+        Moshi.Builder()
+            .addLast(KotlinJsonAdapterFactory())
+            .build()
+    }
+
     fun getServers(): Flow<List<ServerConfig>> = serverConfigStore.getServers()
 
     fun getActiveServer(): Flow<ServerConfig?> = serverConfigStore.getActiveServer()
@@ -66,10 +74,7 @@ class VideoRepository @Inject constructor(
             Log.d("VideoRepository", "Step 3: HTTP ${httpResponse.code}")
             val json = httpResponse.body?.string() ?: ""
             Log.d("VideoRepository", "Step 4: Raw response: ${json.take(200)}")
-            val moshi = Moshi.Builder()
-                .addLast(KotlinJsonAdapterFactory())
-                .build()
-            val adapter = moshi.adapter(SourcesResponse::class.java)
+            val adapter = jsonMoshi.adapter(SourcesResponse::class.java)
             val parsed = adapter.fromJson(json)
             if (parsed == null) {
                 FetchSourcesResult.Error("服务器返回空响应")
@@ -138,11 +143,26 @@ class VideoRepository @Inject constructor(
                 }
                 val apiUrl = buildVidHubUrl(server, "/api/search", params)
                 Log.d("VideoRepository", "search: calling ${apiUrl.take(120)}...")
-                val response = api.search(apiUrl)
-                if (response.code == 200) {
-                    response.list?.map { it.toVideoItem() } ?: emptyList()
+
+                val request = Request.Builder().url(apiUrl).build()
+                val httpResponse = withContext(Dispatchers.IO) {
+                    okHttp.newCall(request).execute()
+                }
+                val json = httpResponse.body?.string() ?: ""
+                if (httpResponse.code != 200) {
+                    Log.w("VideoRepository", "search: HTTP ${httpResponse.code} for ${apiUrl.take(80)}...")
+                    return@mapNotNull null
+                }
+
+                val adapter = jsonMoshi.adapter(SearchResponse::class.java)
+                val parsed = adapter.fromJson(json)
+                if (parsed == null) {
+                    Log.w("VideoRepository", "search: null parse for ${apiUrl.take(80)}...")
+                    emptyList()
+                } else if (parsed.code == 200) {
+                    parsed.list?.map { it.toVideoItem() } ?: emptyList()
                 } else {
-                    Log.w("VideoRepository", "search: API returned code=${response.code} msg=${response.msg}")
+                    Log.w("VideoRepository", "search: API code=${parsed.code} msg=${parsed.msg}")
                     emptyList()
                 }
             }
@@ -160,8 +180,21 @@ class VideoRepository @Inject constructor(
                 params["apiUrl"] = apiUrl
             }
             val url = buildVidHubUrl(server, "/api/detail", params)
-            val response = api.detail(url)
-            if (response.code == 200 && response.videoInfo != null) {
+            Log.d("VideoRepository", "detail: calling ${url.take(120)}...")
+
+            val request = Request.Builder().url(url).build()
+            val httpResponse = withContext(Dispatchers.IO) {
+                okHttp.newCall(request).execute()
+            }
+            val json = httpResponse.body?.string() ?: ""
+            if (httpResponse.code != 200) {
+                Log.w("VideoRepository", "detail: HTTP ${httpResponse.code} for ${url.take(80)}...")
+                return@detail Result.success(null)
+            }
+
+            val adapter = jsonMoshi.adapter(DetailResponse::class.java)
+            val response = adapter.fromJson(json)
+            if (response != null && response.code == 200 && response.videoInfo != null) {
                 val info = response.videoInfo
                 val episodes = response.episodes?.mapIndexed { index, url ->
                     Episode(name = "第${index + 1}集", url = url, index = index)
@@ -184,6 +217,7 @@ class VideoRepository @Inject constructor(
                 Result.success(null)
             }
         } catch (e: Exception) {
+            Log.e("VideoRepository", "detail error for vodId='${vodId}'", e)
             Result.failure(e)
         }
     }
