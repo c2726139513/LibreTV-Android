@@ -65,8 +65,8 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.2.1")
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.50")
-    ksp("com.google.dagger:hilt-compiler:2.50")
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    ksp("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-fragment:1.1.0")
 
     // Retrofit + Moshi
