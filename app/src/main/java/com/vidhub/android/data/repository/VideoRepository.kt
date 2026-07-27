@@ -123,7 +123,10 @@ class VideoRepository @Inject constructor(
             }
             server.customSources.forEach { cmsUrls.add(it.url) }
 
-            if (cmsUrls.isEmpty()) return@search Result.success(emptyList())
+            if (cmsUrls.isEmpty()) {
+                Log.w("VideoRepository", "search: no enabled sources for ${server.name}")
+                return@search Result.success(emptyList())
+            }
 
             val results = cmsUrls.mapNotNull { cmsUrl ->
                 val params = mutableMapOf(
@@ -134,13 +137,18 @@ class VideoRepository @Inject constructor(
                     params["apiUrl"] = cmsUrl
                 }
                 val apiUrl = buildVidHubUrl(server, "/api/search", params)
+                Log.d("VideoRepository", "search: calling ${apiUrl.take(120)}...")
                 val response = api.search(apiUrl)
                 if (response.code == 200) {
                     response.list?.map { it.toVideoItem() } ?: emptyList()
-                } else emptyList()
+                } else {
+                    Log.w("VideoRepository", "search: API returned code=${response.code} msg=${response.msg}")
+                    emptyList()
+                }
             }
             Result.success(results.flatten())
         } catch (e: Exception) {
+            Log.e("VideoRepository", "search error for '${keyword}'", e)
             Result.failure(e)
         }
     }

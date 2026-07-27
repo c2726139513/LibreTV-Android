@@ -1,5 +1,6 @@
 package com.vidhub.android.ui.search
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidhub.android.data.repository.VideoRepository
@@ -60,7 +61,8 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { e ->
-                    _error.value = e.message ?: "搜索失败"
+                    Log.e("SearchViewModel", "search failed", e)
+                    _error.value = e.message ?: "搜索失败(${e.javaClass.simpleName})"
                 }
             _isSearching.value = false
         }
