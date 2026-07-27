@@ -70,6 +70,8 @@ class ServerConfigStore(private val context: Context) {
         prefs.edit().putString(Constants.ACTIVE_SERVER_ID_KEY, id).apply()
     }
 
+    fun getServerById(id: String): ServerConfig? = getServerList().find { it.id == id }
+
     fun getActiveServer(): Flow<ServerConfig?> = flow {
         emit(getActiveServerSync())
     }.flowOn(Dispatchers.IO)

@@ -10,6 +10,7 @@ data class ServerConfig(
     @Json(name = "url") val url: String,
     @Json(name = "password") val password: String,
     @Json(name = "isActive") val isActive: Boolean = false,
-    @Json(name = "cmsSources") val cmsSources: List<String> = emptyList(),
+    @Json(name = "enabledSources") val enabledSources: List<String> = emptyList(),
+    @Json(name = "customSources") val customSources: List<CustomSource> = emptyList(),
     @Json(name = "addedAt") val addedAt: Long = System.currentTimeMillis()
 )

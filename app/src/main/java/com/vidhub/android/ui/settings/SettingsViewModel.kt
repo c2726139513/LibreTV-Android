@@ -2,7 +2,9 @@ package com.vidhub.android.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vidhub.android.data.remote.dto.SourceInfo
 import com.vidhub.android.data.repository.VideoRepository
+import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.ServerConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,32 +43,48 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun addServer(name: String, url: String, password: String, cmsSources: List<String> = emptyList()) {
+    fun addServer(name: String, url: String, password: String) {
         viewModelScope.launch {
             val config = ServerConfig(
                 name = name,
                 url = url,
                 password = password,
-                isActive = _servers.value.isEmpty(),
-                cmsSources = cmsSources
+                isActive = _servers.value.isEmpty()
             )
             repository.addServer(config)
             loadServers()
         }
     }
 
-    fun updateServer(id: String, name: String, url: String, password: String, cmsSources: List<String>) {
+    fun updateServer(id: String, name: String, url: String, password: String) {
         viewModelScope.launch {
+            val existing = _servers.value.find { it.id == id }
             val config = ServerConfig(
                 id = id,
                 name = name,
                 url = url,
                 password = password,
-                isActive = _servers.value.find { it.id == id }?.isActive ?: false,
-                cmsSources = cmsSources,
-                addedAt = _servers.value.find { it.id == id }?.addedAt ?: System.currentTimeMillis()
+                isActive = existing?.isActive ?: false,
+                enabledSources = existing?.enabledSources ?: emptyList(),
+                customSources = existing?.customSources ?: emptyList(),
+                addedAt = existing?.addedAt ?: System.currentTimeMillis()
             )
             repository.updateServer(config)
+            loadServers()
+        }
+    }
+
+    suspend fun fetchSources(server: ServerConfig): List<SourceInfo> {
+        return repository.fetchSources(server)
+    }
+
+    fun updateServerSources(
+        serverId: String,
+        enabledSources: List<String>,
+        customSources: List<CustomSource>
+    ) {
+        viewModelScope.launch {
+            repository.updateServerSources(serverId, enabledSources, customSources)
             loadServers()
         }
     }

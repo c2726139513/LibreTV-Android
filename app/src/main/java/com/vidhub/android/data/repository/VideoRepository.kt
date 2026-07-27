@@ -4,7 +4,9 @@ import com.vidhub.android.data.local.ServerConfigStore
 import com.vidhub.android.data.local.WatchHistoryItem
 import com.vidhub.android.data.local.WatchHistoryStore
 import com.vidhub.android.data.remote.VidHubApi
+import com.vidhub.android.data.remote.dto.SourceInfo
 import com.vidhub.android.data.remote.dto.toVideoItem
+import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.Episode
 import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
@@ -20,6 +22,9 @@ class VideoRepository @Inject constructor(
     private val serverConfigStore: ServerConfigStore,
     private val watchHistoryStore: WatchHistoryStore
 ) {
+    // In-memory cache of server source lists (keyed by server URL)
+    private var sourcesCache: Map<String, List<SourceInfo>> = emptyMap()
+
     fun getServers(): Flow<List<ServerConfig>> = serverConfigStore.getServers()
 
     fun getActiveServer(): Flow<ServerConfig?> = serverConfigStore.getActiveServer()
@@ -34,12 +39,55 @@ class VideoRepository @Inject constructor(
 
     suspend fun setActiveServer(id: String) = serverConfigStore.setActiveServer(id)
 
+    /** Fetch available CMS sources from the VidHub server and cache them. */
+    suspend fun fetchSources(server: ServerConfig): List<SourceInfo> {
+        return try {
+            val url = buildVidHubUrl(server, "/api/sources", emptyMap())
+            val response = api.getSources(url)
+            if (response.code == 200 && response.sources != null) {
+                sourcesCache = sourcesCache + (server.url.trimEnd('/') to response.sources)
+                response.sources
+            } else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Get cached sources for a server URL. */
+    fun getCachedSources(serverUrl: String): List<SourceInfo> {
+        return sourcesCache[serverUrl.trimEnd('/')] ?: emptyList()
+    }
+
+    /** Update a server's enabled sources and custom sources. */
+    suspend fun updateServerSources(
+        serverId: String,
+        enabledSources: List<String>,
+        customSources: List<CustomSource>
+    ) {
+        val server = serverConfigStore.getServerById(serverId) ?: return
+        serverConfigStore.updateServer(
+            server.copy(
+                enabledSources = enabledSources,
+                customSources = customSources
+            )
+        )
+    }
+
     suspend fun search(server: ServerConfig, keyword: String, page: Int = 1): Result<List<VideoItem>> {
         return try {
-            val cmsSources = server.cmsSources.ifEmpty {
-                return@search Result.success(emptyList())
+            val cmsUrls = mutableListOf<String>()
+            val enabledKeys = server.enabledSources
+            if (enabledKeys.isNotEmpty()) {
+                val sources = getCachedSources(server.url.trimEnd('/'))
+                enabledKeys.forEach { key ->
+                    sources.find { it.key == key }?.let { cmsUrls.add(it.api) }
+                }
             }
-            val results = cmsSources.mapNotNull { cmsUrl ->
+            server.customSources.forEach { cmsUrls.add(it.url) }
+
+            if (cmsUrls.isEmpty()) return@search Result.success(emptyList())
+
+            val results = cmsUrls.mapNotNull { cmsUrl ->
                 val params = mutableMapOf(
                     "wd" to keyword,
                     "pg" to page.toString()

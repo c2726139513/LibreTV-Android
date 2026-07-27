@@ -6,6 +6,7 @@ import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -18,6 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import com.vidhub.android.R
+import com.vidhub.android.data.remote.dto.SourceInfo
+import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.navigation.Router
 import dagger.hilt.android.AndroidEntryPoint
@@ -44,7 +47,8 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
         serverAdapter = ServerAdapter(
             onEdit = { server -> showEditServerDialog(server) },
             onDelete = { server -> showDeleteConfirmDialog(server) },
-            onActivate = { server -> viewModel.setActiveServer(server.id) }
+            onActivate = { server -> viewModel.setActiveServer(server.id) },
+            onManageSources = { server -> showSourceManageDialog(server) }
         )
         serverList.adapter = serverAdapter
 
@@ -124,14 +128,6 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
         }
         layout.addView(passwordInput)
 
-        val cmsSourcesInput = EditText(context).apply {
-            hint = "CMS 源地址（每行一个）"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            setText(existing?.cmsSources?.joinToString("\n") ?: "")
-            minLines = 3
-        }
-        layout.addView(cmsSourcesInput)
-
         AlertDialog.Builder(context)
             .setTitle(if (existing == null) "添加服务器" else "编辑服务器")
             .setView(layout)
@@ -139,17 +135,14 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
                 val name = nameInput.text.toString().trim()
                 val url = urlInput.text.toString().trim()
                 val password = passwordInput.text.toString().trim()
-                val cmsSources = cmsSourcesInput.text.lines()
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
                 if (name.isBlank() || url.isBlank()) {
                     Toast.makeText(context, "名称和地址不能为空", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (existing != null) {
-                    viewModel.updateServer(existing.id, name, url, password, cmsSources)
+                    viewModel.updateServer(existing.id, name, url, password)
                 } else {
-                    viewModel.addServer(name, url, password, cmsSources)
+                    viewModel.addServer(name, url, password)
                 }
             }
             .setNegativeButton("取消", null)
@@ -164,12 +157,154 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
             .setNegativeButton("取消", null)
             .show()
     }
+
+    private fun showSourceManageDialog(server: ServerConfig) {
+        val context = requireContext()
+        val loadingDialog = AlertDialog.Builder(context)
+            .setTitle("管理源 - ${server.name}")
+            .setMessage("正在获取源列表...")
+            .setCancelable(false)
+            .show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val sources = viewModel.fetchSources(server)
+            loadingDialog.dismiss()
+            if (sources.isEmpty()) {
+                Toast.makeText(context, "无法获取源列表，请检查服务器连接", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            showSourceCheckDialog(server, sources)
+        }
+    }
+
+    private fun showSourceCheckDialog(server: ServerConfig, sources: List<SourceInfo>) {
+        val context = requireContext()
+        val selectedKeys = server.enabledSources.toMutableSet()
+
+        val layout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 24)
+        }
+
+        layout.addView(TextView(context).apply {
+            text = "可用源"
+            textSize = 18f
+            setPadding(0, 0, 0, 16)
+        })
+
+        val checkboxes = sources.map { source ->
+            CheckBox(context).apply {
+                text = source.name
+                isChecked = selectedKeys.isEmpty() || selectedKeys.contains(source.key)
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) selectedKeys.add(source.key)
+                    else selectedKeys.remove(source.key)
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }.also { layout.addView(it) }
+        }
+
+        layout.addView(TextView(context).apply {
+            text = "\n自定义源"
+            textSize = 18f
+            setPadding(0, 16, 0, 8)
+        })
+
+        val customSources = server.customSources.toMutableList()
+        val customContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        fun refreshCustomView() {
+            customContainer.removeAllViews()
+            customSources.forEachIndexed { index, cs ->
+                val row = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, 4, 0, 4)
+                }
+                row.addView(TextView(context).apply {
+                    text = "${cs.name} (${cs.url})"
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                row.addView(Button(context).apply {
+                    text = "删除"
+                    setOnClickListener {
+                        customSources.removeAt(index)
+                        refreshCustomView()
+                    }
+                })
+                customContainer.addView(row)
+            }
+        }
+        refreshCustomView()
+        layout.addView(customContainer)
+
+        layout.addView(Button(context).apply {
+            text = "+ 添加自定义源"
+            setOnClickListener { showAddCustomSourceDialog(customSources) { refreshCustomView() } }
+        })
+
+        AlertDialog.Builder(context)
+            .setTitle("选择启用的源")
+            .setView(layout)
+            .setPositiveButton("保存") { _, _ ->
+                val enabled = sources
+                    .filter { selectedKeys.contains(it.key) }
+                    .map { it.key }
+                viewModel.updateServerSources(server.id, enabled, customSources.toList())
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showAddCustomSourceDialog(
+        customSources: MutableList<CustomSource>,
+        onRefresh: () -> Unit
+    ) {
+        val context = requireContext()
+        val layout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 24)
+        }
+        val nameInput = EditText(context).apply {
+            hint = "源名称"
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 16) }
+        }
+        layout.addView(nameInput)
+        val urlInput = EditText(context).apply {
+            hint = "CMS API 地址"
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+        }
+        layout.addView(urlInput)
+
+        AlertDialog.Builder(context)
+            .setTitle("添加自定义源")
+            .setView(layout)
+            .setPositiveButton("添加") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                val url = urlInput.text.toString().trim()
+                if (name.isBlank() || url.isBlank()) {
+                    Toast.makeText(context, "名称和地址不能为空", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                customSources.add(CustomSource(name = name, url = url))
+                onRefresh()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
 }
 
 class ServerAdapter(
     private val onEdit: (ServerConfig) -> Unit,
     private val onDelete: (ServerConfig) -> Unit,
-    private val onActivate: (ServerConfig) -> Unit
+    private val onActivate: (ServerConfig) -> Unit,
+    private val onManageSources: (ServerConfig) -> Unit
 ) : RecyclerView.Adapter<ServerAdapter.ViewHolder>() {
 
     private var servers = listOf<ServerConfig>()
@@ -200,17 +335,19 @@ class ServerAdapter(
             orientation = LinearLayout.HORIZONTAL
         }
         val activateBtn = Button(parent.context).apply { text = "切换" }
+        val manageSourcesBtn = Button(parent.context).apply { text = "管理源" }
         val editBtn = Button(parent.context).apply { text = "编辑" }
         val deleteBtn = Button(parent.context).apply { text = "删除" }
 
         buttonLayout.addView(activateBtn)
+        buttonLayout.addView(manageSourcesBtn)
         buttonLayout.addView(editBtn)
         buttonLayout.addView(deleteBtn)
         view.addView(nameText)
         view.addView(urlText)
         view.addView(buttonLayout)
 
-        return ViewHolder(view, nameText, urlText, activateBtn, editBtn, deleteBtn)
+        return ViewHolder(view, nameText, urlText, activateBtn, manageSourcesBtn, editBtn, deleteBtn)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -221,6 +358,7 @@ class ServerAdapter(
         }
         holder.urlText.text = server.url
         holder.activateBtn.setOnClickListener { onActivate(server) }
+        holder.manageSourcesBtn.setOnClickListener { onManageSources(server) }
         holder.editBtn.setOnClickListener { onEdit(server) }
         holder.deleteBtn.setOnClickListener { onDelete(server) }
     }
@@ -232,6 +370,7 @@ class ServerAdapter(
         val nameText: TextView,
         val urlText: TextView,
         val activateBtn: Button,
+        val manageSourcesBtn: Button,
         val editBtn: Button,
         val deleteBtn: Button
     ) : RecyclerView.ViewHolder(view)
