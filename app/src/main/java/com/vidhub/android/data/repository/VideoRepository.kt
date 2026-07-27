@@ -3,8 +3,11 @@ package com.vidhub.android.data.repository
 import com.vidhub.android.data.local.ServerConfigStore
 import com.vidhub.android.data.local.WatchHistoryItem
 import com.vidhub.android.data.local.WatchHistoryStore
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.vidhub.android.data.remote.VidHubApi
 import com.vidhub.android.data.remote.dto.SourceInfo
+import com.vidhub.android.data.remote.dto.SourcesResponse
 import com.vidhub.android.data.remote.dto.toVideoItem
 import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.Episode
@@ -47,12 +50,22 @@ class VideoRepository @Inject constructor(
 
     suspend fun setActiveServer(id: String) = serverConfigStore.setActiveServer(id)
 
+    private val sourcesMoshi = Moshi.Builder()
+        .addLast(KotlinJsonAdapterFactory())
+        .build()
+    private val sourcesResponseAdapter = sourcesMoshi.adapter(SourcesResponse::class.java)
+
     suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
         return try {
             val url = buildVidHubUrl(server, "/api/sources", emptyMap())
             Log.d("VideoRepository", "Fetching sources from: ${url.take(100)}...")
-            val response = api.getSources(url)
-            if (response.code == 200 && response.sources != null) {
+            val body = api.getSources(url)
+            val json = body.string()
+            Log.d("VideoRepository", "Raw response: ${json.take(200)}")
+            val response = sourcesResponseAdapter.fromJson(json)
+            if (response == null) {
+                FetchSourcesResult.Error("服务器返回空响应")
+            } else if (response.code == 200 && response.sources != null) {
                 sourcesCache = sourcesCache + (server.url.trimEnd('/') to response.sources)
                 FetchSourcesResult.Success(response.sources)
             } else {
