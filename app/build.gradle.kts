@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.libretv.android"
+    namespace = "com.vidhub.android"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.libretv.android"
+        applicationId = "com.vidhub.android"
         minSdk = 21
         targetSdk = 34
         versionCode = 1

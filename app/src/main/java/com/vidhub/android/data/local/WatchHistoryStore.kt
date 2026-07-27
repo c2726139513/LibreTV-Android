@@ -1,0 +1,75 @@
+package com.vidhub.android.data.local
+
+import android.content.Context
+import com.vidhub.android.util.Constants
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
+import java.lang.reflect.ParameterizedType
+
+@JsonClass(generateAdapter = true)
+data class WatchHistoryItem(
+    @Json(name = "videoId") val videoId: String,
+    @Json(name = "title") val title: String,
+    @Json(name = "coverUrl") val coverUrl: String?,
+    @Json(name = "serverId") val serverId: String,
+    @Json(name = "episodeIndex") val episodeIndex: Int,
+    @Json(name = "episodeName") val episodeName: String?,
+    @Json(name = "position") val position: Long,
+    @Json(name = "duration") val duration: Long,
+    @Json(name = "lastWatched") val lastWatched: Long,
+    @Json(name = "sourceName") val sourceName: String?
+)
+
+class WatchHistoryStore(private val context: Context) {
+    private val moshi = Moshi.Builder()
+        .addLast(KotlinJsonAdapterFactory())
+        .build()
+    private val listType = object : ParameterizedType {
+        override fun getRawType() = List::class.java
+        override fun getActualTypeArguments() = arrayOf(WatchHistoryItem::class.java)
+        override fun getOwnerType() = null
+    }
+    private val adapter = moshi.adapter<List<WatchHistoryItem>>(listType)
+    private val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getRecentHistory(limit: Int = 20): Flow<List<WatchHistoryItem>> = flow {
+        val items = getHistoryList()
+        emit(items.sortedByDescending { it.lastWatched }.take(limit))
+    }.flowOn(Dispatchers.IO)
+
+    suspend fun saveProgress(item: WatchHistoryItem) = withContext(Dispatchers.IO) {
+        val items = getHistoryList().toMutableList()
+        val existingIndex = items.indexOfFirst { it.videoId == item.videoId && it.episodeIndex == item.episodeIndex }
+        if (existingIndex >= 0) {
+            items[existingIndex] = item
+        } else {
+            items.add(item)
+        }
+        prefs.edit().putString(Constants.WATCH_HISTORY_KEY, adapter.toJson(items)).apply()
+    }
+
+    suspend fun deleteItem(videoId: String) = withContext(Dispatchers.IO) {
+        val items = getHistoryList().filter { it.videoId != videoId }
+        prefs.edit().putString(Constants.WATCH_HISTORY_KEY, adapter.toJson(items)).apply()
+    }
+
+    suspend fun clearAll() = withContext(Dispatchers.IO) {
+        prefs.edit().remove(Constants.WATCH_HISTORY_KEY).apply()
+    }
+
+    private fun getHistoryList(): List<WatchHistoryItem> {
+        val json = prefs.getString(Constants.WATCH_HISTORY_KEY, null) ?: return emptyList()
+        return try {
+            adapter.fromJson(json) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+}

@@ -52,7 +52,7 @@ VidHub 的 Android TV 原生客户端。通过 VidHub 服务端 API 搜索视频
 LibreTV-Android/
 ├── app/
 │   ├── src/main/
-│   │   ├── java/com/libretv/android/
+│   │   ├── java/com/vidhub/android/
 │   │   │   ├── App.kt                          # Hilt Application
 │   │   │   ├── MainActivity.kt                 # Leanback 入口
 │   │   │   │

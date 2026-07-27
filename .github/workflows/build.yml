@@ -44,7 +44,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LibreTV-APK-${{ github.sha }}
+          name: VidHub-APK-${{ github.sha }}
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: LibreTV-APK-${{ github.sha }}
+          name: VidHub-APK-${{ github.sha }}
           path: apk
 
       - name: Create GitHub Release

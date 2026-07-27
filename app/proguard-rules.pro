@@ -1,7 +1,7 @@
 # Retrofit
 -keepattributes Signature
 -keepattributes *Annotation*
--keep class com.libretv.android.data.remote.** { *; }
+-keep class com.vidhub.android.data.remote.** { *; }
 
 # Moshi: keep generated @JsonClass adapters
 -keep class **._JsonAdapter { *; }

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LibreTV"
+rootProject.name = "VidHub"
 include(":app")
