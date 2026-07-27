@@ -57,11 +57,13 @@ class VideoRepository @Inject constructor(
 
     suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
         return try {
+            Log.d("VideoRepository", "Step 1: building URL...")
             val url = buildVidHubUrl(server, "/api/sources", emptyMap())
-            Log.d("VideoRepository", "Fetching sources from: ${url.take(100)}...")
+            Log.d("VideoRepository", "Step 2: calling API from: ${url.take(100)}...")
             val body = api.getSources(url)
+            Log.d("VideoRepository", "Step 3: got response body, reading string...")
             val json = body.string()
-            Log.d("VideoRepository", "Raw response: ${json.take(200)}")
+            Log.d("VideoRepository", "Step 4: Raw response: ${json.take(200)}")
             val response = sourcesResponseAdapter.fromJson(json)
             if (response == null) {
                 FetchSourcesResult.Error("服务器返回空响应")
@@ -78,7 +80,8 @@ class VideoRepository @Inject constructor(
             FetchSourcesResult.Error("网络错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
         } catch (e: Exception) {
             Log.e("VideoRepository", "fetchSources unexpected error", e)
-            FetchSourcesResult.Error("数据解析错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
+            val stack = e.stackTraceToString().substringBefore('\n')
+            FetchSourcesResult.Error("${e.javaClass.simpleName}: ${e.message}\n$stack")
         }
     }
 
