@@ -96,36 +96,37 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
             setPadding(48, 24, 48, 24)
         }
 
-        val nameInput = EditText(context).apply {
-            hint = "服务器名称"
-            setText(existing?.name ?: "")
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 16) }
+        fun styledEditText(hint: String, inputType: Int, initial: String): EditText {
+            return EditText(context).apply {
+                this.hint = hint
+                this.inputType = inputType
+                setText(initial)
+                setTextColor(0xFFFFFFFF.toInt())
+                setHintTextColor(0xFF666666.toInt())
+                setBackgroundColor(0xFF2A2A2A.toInt())
+                setPadding(16, 12, 16, 12)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, 12) }
+            }
         }
+
+        val nameInput = styledEditText("服务器名称", InputType.TYPE_CLASS_TEXT, existing?.name ?: "")
         layout.addView(nameInput)
 
-        val urlInput = EditText(context).apply {
-            hint = "服务器地址 (https://...)"
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
-            setText(existing?.url ?: "")
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 16) }
-        }
+        val urlInput = styledEditText(
+            "服务器地址 (https://...)",
+            InputType.TYPE_TEXT_VARIATION_URI,
+            existing?.url ?: ""
+        )
         layout.addView(urlInput)
 
-        val passwordInput = EditText(context).apply {
-            hint = "密码"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setText(existing?.password ?: "")
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 16) }
-        }
+        val passwordInput = styledEditText(
+            "密码",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            existing?.password ?: ""
+        )
         layout.addView(passwordInput)
 
         AlertDialog.Builder(context)
