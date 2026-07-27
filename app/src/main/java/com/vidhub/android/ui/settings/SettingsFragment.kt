@@ -181,75 +181,89 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
     private fun showSourceCheckDialog(server: ServerConfig, sources: List<SourceInfo>) {
         val context = requireContext()
         val selectedKeys = server.enabledSources.toMutableSet()
+        val customSources = server.customSources.toMutableList()
 
         val layout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 24)
         }
 
-        layout.addView(TextView(context).apply {
-            text = "可用源"
-            textSize = 18f
-            setPadding(0, 0, 0, 16)
-        })
+        fun rebuildSourceList() {
+            layout.removeAllViews()
 
-        val checkboxes = sources.map { source ->
-            CheckBox(context).apply {
-                text = source.name
-                isChecked = selectedKeys.isEmpty() || selectedKeys.contains(source.key)
-                setOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked) selectedKeys.add(source.key)
-                    else selectedKeys.remove(source.key)
-                }
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            }.also { layout.addView(it) }
-        }
+            layout.addView(TextView(context).apply {
+                text = "服务器源"
+                setTextColor(0xFFAAAAAA.toInt())
+                textSize = 16f
+                setPadding(0, 0, 0, 12)
+            })
 
-        layout.addView(TextView(context).apply {
-            text = "\n自定义源"
-            textSize = 18f
-            setPadding(0, 16, 0, 8)
-        })
-
-        val customSources = server.customSources.toMutableList()
-        val customContainer = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        fun refreshCustomView() {
-            customContainer.removeAllViews()
-            customSources.forEachIndexed { index, cs ->
-                val row = LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, 4, 0, 4)
-                }
-                row.addView(TextView(context).apply {
-                    text = "${cs.name} (${cs.url})"
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                })
-                row.addView(Button(context).apply {
-                    text = "删除"
-                    setOnClickListener {
-                        customSources.removeAt(index)
-                        refreshCustomView()
+            sources.forEach { source ->
+                layout.addView(CheckBox(context).apply {
+                    text = source.name
+                    isChecked = selectedKeys.contains(source.key)
+                    setTextColor(0xFFFFFFFF.toInt())
+                    setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) selectedKeys.add(source.key)
+                        else selectedKeys.remove(source.key)
                     }
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
                 })
-                customContainer.addView(row)
             }
-        }
-        refreshCustomView()
-        layout.addView(customContainer)
 
-        layout.addView(Button(context).apply {
-            text = "+ 添加自定义源"
-            setOnClickListener { showAddCustomSourceDialog(customSources) { refreshCustomView() } }
-        })
+            if (customSources.isNotEmpty()) {
+                layout.addView(TextView(context).apply {
+                    text = "自定义源"
+                    setTextColor(0xFFAAAAAA.toInt())
+                    textSize = 16f
+                    setPadding(0, 16, 0, 8)
+                })
+
+                customSources.forEachIndexed { index, cs ->
+                    val row = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding(0, 4, 0, 4)
+                    }
+                    row.addView(CheckBox(context).apply {
+                        text = "${cs.name} (${cs.url.take(30)}...)"
+                        isChecked = true
+                        isEnabled = false
+                        setTextColor(0xFFFFFFFF.toInt())
+                        layoutParams = LinearLayout.LayoutParams(
+                            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    })
+                    row.addView(Button(context).apply {
+                        text = "删除"
+                        setTextColor(0xFFEF5350.toInt())
+                        setOnClickListener {
+                            customSources.removeAt(index)
+                            rebuildSourceList()
+                        }
+                    })
+                    layout.addView(row)
+                }
+            }
+
+            layout.addView(Button(context).apply {
+                text = "＋ 添加自定义源"
+                setTextColor(0xFF1E90FF.toInt())
+                setOnClickListener { showAddCustomSourceDialog(customSources) { rebuildSourceList() } }
+            })
+        }
+
+        rebuildSourceList()
+
+        val scrollView = android.widget.ScrollView(context).apply {
+            addView(layout)
+        }
 
         AlertDialog.Builder(context)
             .setTitle("选择启用的源")
-            .setView(layout)
+            .setView(scrollView)
             .setPositiveButton("保存") { _, _ ->
                 val enabled = sources
                     .filter { selectedKeys.contains(it.key) }
