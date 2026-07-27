@@ -330,46 +330,61 @@ class ServerAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LinearLayout(parent.context).apply {
+        val ctx = parent.context
+        val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 16, 32, 16)
+            setPadding(32, 20, 32, 20)
+            setBackgroundColor(0xFF1A1A2E.toInt())
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        val nameText = TextView(parent.context).apply {
+        val nameText = TextView(ctx).apply {
             id = View.generateViewId()
             textSize = 18f
+            setTextColor(0xFFFFFFFF.toInt())
         }
-        val urlText = TextView(parent.context).apply {
+        val urlText = TextView(ctx).apply {
             id = View.generateViewId()
-            textSize = 14f
+            textSize = 13f
+            setTextColor(0xFFAAAAAA.toInt())
+            setPadding(0, 4, 0, 12)
         }
-        val buttonLayout = LinearLayout(parent.context).apply {
+        val buttonLayout = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
         }
-        val activateBtn = Button(parent.context).apply { text = "切换" }
-        val manageSourcesBtn = Button(parent.context).apply { text = "管理源" }
-        val editBtn = Button(parent.context).apply { text = "编辑" }
-        val deleteBtn = Button(parent.context).apply { text = "删除" }
+        val styleBtn = { text: String, color: Int ->
+            Button(ctx).apply {
+                setText(text)
+                setTextColor(0xFFFFFFFF.toInt())
+                setBackgroundColor(color)
+                layoutParams = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                ).apply { setMargins(0, 0, 8, 0) }
+            }
+        }
+        val activateBtn = styleBtn("切换", 0xFF1E90FF.toInt())
+        val manageSourcesBtn = styleBtn("管理源", 0xFF1565C0.toInt())
+        val editBtn = styleBtn("编辑", 0xFF4CAF50.toInt())
+        val deleteBtn = styleBtn("删除", 0xFFEF5350.toInt())
 
         buttonLayout.addView(activateBtn)
         buttonLayout.addView(manageSourcesBtn)
         buttonLayout.addView(editBtn)
         buttonLayout.addView(deleteBtn)
-        view.addView(nameText)
-        view.addView(urlText)
-        view.addView(buttonLayout)
+        root.addView(nameText)
+        root.addView(urlText)
+        root.addView(buttonLayout)
 
-        return ViewHolder(view, nameText, urlText, activateBtn, manageSourcesBtn, editBtn, deleteBtn)
+        return ViewHolder(root, nameText, urlText, activateBtn, manageSourcesBtn, editBtn, deleteBtn)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val server = servers[position]
         holder.nameText.text = buildString {
             append(server.name)
-            if (server.isActive) append(" ✓")
+            if (server.isActive) append("  ✓")
         }
         holder.urlText.text = server.url
         holder.activateBtn.setOnClickListener { onActivate(server) }
