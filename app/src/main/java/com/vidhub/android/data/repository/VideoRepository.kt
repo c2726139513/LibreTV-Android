@@ -10,11 +10,18 @@ import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.Episode
 import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
+import android.util.Log
 import com.vidhub.android.util.Sha256
 import kotlinx.coroutines.flow.Flow
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Result wrapper for [VideoRepository.fetchSources] that carries error detail. */
+sealed class FetchSourcesResult {
+    data class Success(val sources: List<SourceInfo>) : FetchSourcesResult()
+    data class Error(val message: String) : FetchSourcesResult()
+}
 
 @Singleton
 class VideoRepository @Inject constructor(
@@ -39,17 +46,22 @@ class VideoRepository @Inject constructor(
 
     suspend fun setActiveServer(id: String) = serverConfigStore.setActiveServer(id)
 
-    /** Fetch available CMS sources from the VidHub server and cache them. */
-    suspend fun fetchSources(server: ServerConfig): List<SourceInfo> {
+    suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
         return try {
             val url = buildVidHubUrl(server, "/api/sources", emptyMap())
+            Log.d("VideoRepository", "Fetching sources from: ${url.take(100)}...")
             val response = api.getSources(url)
             if (response.code == 200 && response.sources != null) {
                 sourcesCache = sourcesCache + (server.url.trimEnd('/') to response.sources)
-                response.sources
-            } else emptyList()
+                FetchSourcesResult.Success(response.sources)
+            } else {
+                val msg = response.msg ?: "服务器返回状态码 ${response.code}"
+                Log.w("VideoRepository", "/api/sources returned code=${response.code}: $msg")
+                FetchSourcesResult.Error(msg)
+            }
         } catch (e: Exception) {
-            emptyList()
+            Log.e("VideoRepository", "fetchSources failed", e)
+            FetchSourcesResult.Error("网络错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
         }
     }
 
@@ -154,9 +166,12 @@ class VideoRepository @Inject constructor(
         val base = server.url.trimEnd('/')
         val timestamp = System.currentTimeMillis()
         val hash = Sha256.hash(server.password)
-        val queryString = params.entries.joinToString("&") {
+        val queryParts = mutableListOf<String>()
+        queryParts.addAll(params.entries.map {
             "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}"
-        }
-        return "$base$path?$queryString&auth=$hash&t=$timestamp"
+        })
+        queryParts.add("auth=$hash")
+        queryParts.add("t=$timestamp")
+        return "$base$path?${queryParts.joinToString("&")}"
     }
 }

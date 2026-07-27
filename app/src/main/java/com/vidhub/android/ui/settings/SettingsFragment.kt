@@ -20,9 +20,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import com.vidhub.android.R
 import com.vidhub.android.data.remote.dto.SourceInfo
+import com.vidhub.android.data.repository.FetchSourcesResult
 import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.ServerConfig
-import com.vidhub.android.navigation.Router
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -167,13 +167,14 @@ class SettingsFragment : Fragment(R.layout.settings_fragment) {
             .show()
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val sources = viewModel.fetchSources(server)
+            val result = viewModel.fetchSources(server)
             loadingDialog.dismiss()
-            if (sources.isEmpty()) {
-                Toast.makeText(context, "无法获取源列表，请检查服务器连接", Toast.LENGTH_SHORT).show()
-                return@launch
+            when (result) {
+                is FetchSourcesResult.Success -> showSourceCheckDialog(server, result.sources)
+                is FetchSourcesResult.Error -> {
+                    Toast.makeText(context, "获取源列表失败: ${result.message}", Toast.LENGTH_LONG).show()
+                }
             }
-            showSourceCheckDialog(server, sources)
         }
     }
 

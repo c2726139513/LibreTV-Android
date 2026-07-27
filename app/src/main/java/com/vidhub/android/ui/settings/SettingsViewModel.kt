@@ -3,6 +3,7 @@ package com.vidhub.android.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidhub.android.data.remote.dto.SourceInfo
+import com.vidhub.android.data.repository.FetchSourcesResult
 import com.vidhub.android.data.repository.VideoRepository
 import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.ServerConfig
@@ -74,7 +75,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    suspend fun fetchSources(server: ServerConfig): List<SourceInfo> {
+    suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
         return repository.fetchSources(server)
     }
 
