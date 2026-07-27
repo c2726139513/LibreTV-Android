@@ -75,22 +75,27 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
     }
 
     private fun observeData() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+        // Use fragment lifecycle (not viewLifecycleOwner) to avoid IllegalStateException
+        // when accessing viewLifecycleOwner after onDestroyView
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.searchResults.collect { results ->
+                        if (!isAdded) return@collect
                         updateResults(results)
                         emptyText.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
                     }
                 }
                 launch {
                     viewModel.isSearching.collect { searching ->
+                        if (!isAdded) return@collect
                         searchButton.isEnabled = !searching
                         searchButton.text = if (searching) "搜索中…" else "搜索"
                     }
                 }
                 launch {
                     viewModel.error.collect { error ->
+                        if (!isAdded) return@collect
                         if (error != null) {
                             emptyText.text = error
                             emptyText.visibility = View.VISIBLE
@@ -106,10 +111,11 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
     private fun updateResults(results: List<VideoItem>) {
         rowsAdapter.clear()
         if (results.isNotEmpty()) {
+            val activity = requireActivity()
             val header = HeaderItem(0, "搜索结果")
             val cardPresenter = CardPresenter { item ->
                 if (item is VideoItem) {
-                    Router.navigateToDetail(requireActivity(), item.vodId, item.title, item.coverUrl)
+                    Router.navigateToDetail(activity, item.vodId, item.title, item.coverUrl)
                 }
             }
             val adapter = ArrayObjectAdapter(cardPresenter)

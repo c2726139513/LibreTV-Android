@@ -1,10 +1,10 @@
 package com.vidhub.android.ui.browse
 
-import android.graphics.drawable.GradientDrawable
+import android.graphics.Color
 import android.view.ViewGroup
-import androidx.core.content.res.ResourcesCompat
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
+import coil.load
 import com.vidhub.android.R
 import com.vidhub.android.data.local.WatchHistoryItem
 import com.vidhub.android.model.Episode
@@ -22,6 +22,8 @@ class CardPresenter(
             cardType = ImageCardView.CARD_TYPE_INFO_UNDER
             setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
             setBackgroundColor(0xFF1A1A2E.toInt())
+            setTitleTextColor(Color.WHITE)
+            setContentTextColor(Color.WHITE)
         }
         return ViewHolder(cardView)
     }
@@ -33,6 +35,14 @@ class CardPresenter(
             is VideoItem -> {
                 cardView.titleText = item.title
                 cardView.contentText = item.remarks ?: item.year ?: ""
+                if (!item.coverUrl.isNullOrBlank()) {
+                    cardView.mainImageView.load(item.coverUrl) {
+                        crossfade(true)
+                        placeholder(R.drawable.ic_launcher)
+                    }
+                } else {
+                    cardView.setMainImage(null)
+                }
             }
             is WatchHistoryItem -> {
                 cardView.titleText = item.title
