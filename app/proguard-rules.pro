@@ -4,7 +4,7 @@
 -keep class com.vidhub.android.data.remote.** { *; }
 
 # Moshi: keep generated @JsonClass adapters
--keep class **._JsonAdapter { *; }
+-keep class **.*_JsonAdapter { *; }
 -keep @com.squareup.moshi.JsonClass class * { *; }
 -keepclassmembers class * {
     @com.squareup.moshi.Json <fields>;
