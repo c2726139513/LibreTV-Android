@@ -3,6 +3,8 @@ package com.vidhub.android.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidhub.android.data.repository.VideoRepository
+import com.vidhub.android.data.remote.dto.SourceInfo
+import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +42,7 @@ class DetailViewModel @Inject constructor(
                 return@launch
             }
 
-            val apiUrl = server.cmsSources.firstOrNull()
+            val apiUrl = resolveFirstSourceUrl(server)
             repository.detail(server, vodId, apiUrl)
                 .onSuccess { videoItem ->
                     _video.value = videoItem
@@ -54,6 +56,14 @@ class DetailViewModel @Inject constructor(
 
     fun selectEpisode(index: Int) {
         _selectedEpisode.value = index
+    }
+
+    private fun resolveFirstSourceUrl(server: ServerConfig): String? {
+        val sources = repository.getCachedSources(server.url.trimEnd('/'))
+        server.enabledSources.firstOrNull()?.let { key ->
+            sources.find { it.key == key }?.let { return it.api }
+        }
+        return server.customSources.firstOrNull()?.url
     }
 
     fun getCurrentEpisodeUrl(): String? {
