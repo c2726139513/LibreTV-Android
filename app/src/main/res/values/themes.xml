@@ -10,10 +10,4 @@
         <item name="android:navigationBarColor">@color/bg_primary</item>
     </style>
 
-    <style name="Theme.VidHub.Dialog" parent="Theme.AppCompat.Dialog">
-        <item name="android:windowBackground">@color/bg_dialog</item>
-        <item name="android:textColorPrimary">@color/text_primary</item>
-        <item name="android:textColorSecondary">@color/text_secondary</item>
-        <item name="android:colorAccent">@color/accent</item>
-    </style>
 </resources>
