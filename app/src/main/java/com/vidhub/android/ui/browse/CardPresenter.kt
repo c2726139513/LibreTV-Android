@@ -1,6 +1,5 @@
 package com.vidhub.android.ui.browse
 
-import android.graphics.Color
 import android.view.ViewGroup
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
@@ -22,8 +21,7 @@ class CardPresenter(
             cardType = ImageCardView.CARD_TYPE_INFO_UNDER
             setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
             setBackgroundColor(0xFF1A1A2E.toInt())
-            setTitleTextColor(Color.WHITE)
-            setContentTextColor(Color.WHITE)
+            setInfoAreaBackgroundColor(0xCC1A1A2E.toInt())
         }
         return ViewHolder(cardView)
     }
