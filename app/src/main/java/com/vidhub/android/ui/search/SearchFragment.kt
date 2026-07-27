@@ -83,6 +83,22 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
                         emptyText.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
                     }
                 }
+                launch {
+                    viewModel.isSearching.collect { searching ->
+                        searchButton.isEnabled = !searching
+                        searchButton.text = if (searching) "搜索中…" else "搜索"
+                    }
+                }
+                launch {
+                    viewModel.error.collect { error ->
+                        if (error != null) {
+                            emptyText.text = error
+                            emptyText.visibility = View.VISIBLE
+                        } else {
+                            emptyText.text = "输入关键词开始搜索"
+                        }
+                    }
+                }
             }
         }
     }

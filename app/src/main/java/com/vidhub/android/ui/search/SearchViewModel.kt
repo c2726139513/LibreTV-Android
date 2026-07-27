@@ -3,12 +3,9 @@ package com.vidhub.android.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidhub.android.data.repository.VideoRepository
-import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
-import com.vidhub.android.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,10 +40,10 @@ class SearchViewModel @Inject constructor(
         }
 
         searchJob = viewModelScope.launch {
-            delay(Constants.SEARCH_DEBOUNCE_MS)
             _isSearching.value = true
             _error.value = null
             currentPage = 1
+            _searchResults.value = mutableListOf()
 
             val server = repository.getActiveServerSync()
             if (server == null) {
@@ -58,6 +55,9 @@ class SearchViewModel @Inject constructor(
             repository.search(server, query, currentPage)
                 .onSuccess { results ->
                     _searchResults.value = results
+                    if (results.isEmpty()) {
+                        _error.value = "没有找到结果，请尝试其他关键词"
+                    }
                 }
                 .onFailure { e ->
                     _error.value = e.message ?: "搜索失败"
