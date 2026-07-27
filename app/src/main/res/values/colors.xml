@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="search_bg">#FF000000</color>
+    <color name="search_input_bg">#FF333333</color>
+    <color name="search_hint">#FF888888</color>
+    <color name="search_button_bg">#FF1E90FF</color>
+</resources>

@@ -3,27 +3,45 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/black"
+    android:background="@color/search_bg"
     android:padding="16dp">
 
-    <EditText
-        android:id="@+id/search_input"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:hint="搜索视频名称"
-        android:textColorHint="#888888"
-        android:textColor="@android:color/white"
-        android:background="#333333"
-        android:padding="12dp"
-        android:imeOptions="actionSearch"
-        android:inputType="text" />
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/search_input"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:hint="搜索视频名称"
+            android:textColorHint="@color/search_hint"
+            android:textColor="@android:color/white"
+            android:background="@color/search_input_bg"
+            android:padding="12dp"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:singleLine="true" />
+
+        <Button
+            android:id="@+id/search_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:text="搜索"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:background="@color/search_button_bg" />
+
+    </LinearLayout>
 
     <TextView
         android:id="@+id/search_empty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="输入关键词开始搜索"
-        android:textColor="#666666"
+        android:textColor="@color/search_hint"
         android:textSize="16sp"
         android:visibility="gone"
         android:layout_marginTop="24dp"

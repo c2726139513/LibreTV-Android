@@ -1,10 +1,10 @@
 package com.vidhub.android.ui.search
 
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.fragment.app.Fragment
@@ -30,6 +30,7 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
 
     private val viewModel: SearchViewModel by viewModels()
     private lateinit var searchInput: EditText
+    private lateinit var searchButton: Button
     private lateinit var resultsGrid: VerticalGridView
     private lateinit var emptyText: TextView
     private val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
@@ -38,23 +39,35 @@ class SearchFragment : Fragment(R.layout.search_fragment) {
         super.onViewCreated(view, savedInstanceState)
 
         searchInput = view.findViewById(R.id.search_input)
+        searchButton = view.findViewById(R.id.search_button)
         resultsGrid = view.findViewById(R.id.search_results)
         emptyText = view.findViewById(R.id.search_empty)
 
         resultsGrid.adapter = ItemBridgeAdapter(rowsAdapter)
 
-        searchInput.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {}
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                viewModel.search(s?.toString() ?: "")
-            }
-        })
+        val doSearch = {
+            val q = searchInput.text.toString()
+            if (q.isNotBlank()) viewModel.search(q)
+        }
+
+        searchButton.setOnClickListener { doSearch() }
+
+        searchInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                doSearch()
+                true
+            } else false
+        }
 
         searchInput.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER && event.action == KeyEvent.ACTION_DOWN) {
-                viewModel.search(searchInput.text.toString())
-                true
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                        doSearch()
+                        true
+                    }
+                    else -> false
+                }
             } else false
         }
 

@@ -117,16 +117,6 @@ class BrowseFragment : BrowseSupportFragment() {
     }
 
     private fun updateServerRows(servers: List<ServerConfig>) {
-        removeRowsWithPrefix("server_")
-
-        servers.forEachIndexed { index, server ->
-            val header = HeaderItem(server.name)
-            val cardPresenter = CardPresenter()
-            val adapter = ArrayObjectAdapter(cardPresenter)
-            // Placeholder: server content will be loaded in a future iteration
-            rowsAdapter.add(ListRow(header, adapter))
-        }
-        ensureSettingsAtEnd()
     }
 
     private fun ensureSettingsAtEnd() {
