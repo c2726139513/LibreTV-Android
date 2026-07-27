@@ -3,6 +3,7 @@ package com.vidhub.android.data.repository
 import com.vidhub.android.data.local.ServerConfigStore
 import com.vidhub.android.data.local.WatchHistoryItem
 import com.vidhub.android.data.local.WatchHistoryStore
+import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.vidhub.android.data.remote.VidHubApi
@@ -13,9 +14,12 @@ import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.Episode
 import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
-import android.util.Log
 import com.vidhub.android.util.Sha256
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.IOException
 import java.net.URLEncoder
 import javax.inject.Inject
@@ -30,6 +34,7 @@ sealed class FetchSourcesResult {
 @Singleton
 class VideoRepository @Inject constructor(
     private val api: VidHubApi,
+    private val okHttp: OkHttpClient,
     private val serverConfigStore: ServerConfigStore,
     private val watchHistoryStore: WatchHistoryStore
 ) {
@@ -50,29 +55,30 @@ class VideoRepository @Inject constructor(
 
     suspend fun setActiveServer(id: String) = serverConfigStore.setActiveServer(id)
 
-    private val sourcesMoshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
-        .build()
-    private val sourcesResponseAdapter = sourcesMoshi.adapter(SourcesResponse::class.java)
-
     suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
         return try {
             Log.d("VideoRepository", "Step 1: building URL...")
             val url = buildVidHubUrl(server, "/api/sources", emptyMap())
             Log.d("VideoRepository", "Step 2: calling API from: ${url.take(100)}...")
-            val body = api.getSources(url)
-            Log.d("VideoRepository", "Step 3: got response body, reading string...")
-            val json = body.string()
+            val request = Request.Builder().url(url).build()
+            val call = okHttp.newCall(request)
+            val httpResponse = withContext(Dispatchers.IO) { call.execute() }
+            Log.d("VideoRepository", "Step 3: HTTP ${httpResponse.code}")
+            val json = httpResponse.body?.string() ?: ""
             Log.d("VideoRepository", "Step 4: Raw response: ${json.take(200)}")
-            val response = sourcesResponseAdapter.fromJson(json)
-            if (response == null) {
+            val moshi = Moshi.Builder()
+                .addLast(KotlinJsonAdapterFactory())
+                .build()
+            val adapter = moshi.adapter(SourcesResponse::class.java)
+            val parsed = adapter.fromJson(json)
+            if (parsed == null) {
                 FetchSourcesResult.Error("服务器返回空响应")
-            } else if (response.code == 200 && response.sources != null) {
-                sourcesCache = sourcesCache + (server.url.trimEnd('/') to response.sources)
-                FetchSourcesResult.Success(response.sources)
+            } else if (parsed.code == 200 && parsed.sources != null) {
+                sourcesCache = sourcesCache + (server.url.trimEnd('/') to parsed.sources)
+                FetchSourcesResult.Success(parsed.sources)
             } else {
-                val msg = response.msg ?: "服务器返回状态码 ${response.code}"
-                Log.w("VideoRepository", "/api/sources returned code=${response.code}: $msg")
+                val msg = parsed.msg ?: "服务器返回状态码 ${parsed.code}"
+                Log.w("VideoRepository", "/api/sources returned code=${parsed.code}: $msg")
                 FetchSourcesResult.Error(msg)
             }
         } catch (e: IOException) {
