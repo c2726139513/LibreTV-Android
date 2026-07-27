@@ -3,7 +3,6 @@ package com.libretv.android.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.libretv.android.data.repository.VideoRepository
-import com.libretv.android.model.Episode
 import com.libretv.android.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +40,8 @@ class DetailViewModel @Inject constructor(
                 return@launch
             }
 
-            repository.detail(server, vodId)
+            val apiUrl = server.cmsSources.firstOrNull()
+            repository.detail(server, vodId, apiUrl)
                 .onSuccess { videoItem ->
                     _video.value = videoItem
                 }

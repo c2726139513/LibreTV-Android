@@ -3,18 +3,20 @@ package com.libretv.android.data.repository
 import com.libretv.android.data.local.ServerConfigStore
 import com.libretv.android.data.local.WatchHistoryItem
 import com.libretv.android.data.local.WatchHistoryStore
-import com.libretv.android.data.remote.LibreTVApi
+import com.libretv.android.data.remote.VidHubApi
 import com.libretv.android.data.remote.dto.toVideoItem
+import com.libretv.android.model.Episode
 import com.libretv.android.model.ServerConfig
 import com.libretv.android.model.VideoItem
 import com.libretv.android.util.Sha256
 import kotlinx.coroutines.flow.Flow
+import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class VideoRepository @Inject constructor(
-    private val api: LibreTVApi,
+    private val api: VidHubApi,
     private val serverConfigStore: ServerConfigStore,
     private val watchHistoryStore: WatchHistoryStore
 ) {
@@ -34,15 +36,20 @@ class VideoRepository @Inject constructor(
 
     suspend fun search(server: ServerConfig, keyword: String, page: Int = 1): Result<List<VideoItem>> {
         return try {
-            val results = server.cmsSources.ifEmpty { listOf("") }.mapNotNull { cmsSource ->
-                val cmsUrl = if (cmsSource.isBlank()) {
-                    buildSearchUrl(keyword, page)
-                } else {
-                    "${cmsSource}?ac=videolist&wd=$keyword&pg=$page"
+            val cmsSources = server.cmsSources.ifEmpty {
+                return@search Result.success(emptyList())
+            }
+            val results = cmsSources.mapNotNull { cmsUrl ->
+                val params = mutableMapOf(
+                    "wd" to keyword,
+                    "pg" to page.toString()
+                )
+                if (cmsUrl.isNotBlank()) {
+                    params["apiUrl"] = cmsUrl
                 }
-                val proxyUrl = buildProxyUrl(server, cmsUrl)
-                val response = api.search(proxyUrl)
-                if (response.code == 1) {
+                val apiUrl = buildVidHubUrl(server, "/api/search", params)
+                val response = api.search(apiUrl)
+                if (response.code == 200) {
                     response.list?.map { it.toVideoItem() } ?: emptyList()
                 } else emptyList()
             }
@@ -52,13 +59,33 @@ class VideoRepository @Inject constructor(
         }
     }
 
-    suspend fun detail(server: ServerConfig, vodId: String): Result<VideoItem?> {
+    suspend fun detail(server: ServerConfig, vodId: String, apiUrl: String? = null): Result<VideoItem?> {
         return try {
-            val cmsUrl = "?ac=videolist&ids=$vodId"
-            val proxyUrl = buildProxyUrl(server, cmsUrl)
-            val response = api.detail(proxyUrl)
-            if (response.code == 1) {
-                Result.success(response.list?.firstOrNull()?.toVideoItem())
+            val params = mutableMapOf("id" to vodId)
+            if (!apiUrl.isNullOrBlank()) {
+                params["apiUrl"] = apiUrl
+            }
+            val url = buildVidHubUrl(server, "/api/detail", params)
+            val response = api.detail(url)
+            if (response.code == 200 && response.videoInfo != null) {
+                val info = response.videoInfo
+                val episodes = response.episodes?.mapIndexed { index, url ->
+                    Episode(name = "第${index + 1}集", url = url, index = index)
+                } ?: emptyList()
+                val videoItem = VideoItem(
+                    vodId = vodId,
+                    title = info.title ?: "",
+                    coverUrl = info.cover,
+                    remarks = info.remarks,
+                    year = info.year,
+                    area = info.area,
+                    director = info.director,
+                    actor = info.actor,
+                    typeName = info.type,
+                    description = info.desc,
+                    playFrom = info.sourceName
+                )
+                Result.success(videoItem.copy(episodes = episodes))
             } else {
                 Result.success(null)
             }
@@ -75,15 +102,13 @@ class VideoRepository @Inject constructor(
 
     suspend fun clearWatchHistory() = watchHistoryStore.clearAll()
 
-    private fun buildProxyUrl(server: ServerConfig, targetUrl: String): String {
-        val encoded = java.net.URLEncoder.encode(targetUrl, "UTF-8")
+    fun buildVidHubUrl(server: ServerConfig, path: String, params: Map<String, String>): String {
+        val base = server.url.trimEnd('/')
         val timestamp = System.currentTimeMillis()
         val hash = Sha256.hash(server.password)
-        val base = server.url.trimEnd('/')
-        return "$base/proxy/$encoded?auth=$hash&t=$timestamp"
-    }
-
-    private fun buildSearchUrl(keyword: String, page: Int): String {
-        return "?ac=videolist&wd=${java.net.URLEncoder.encode(keyword, "UTF-8")}&pg=$page"
+        val queryString = params.entries.joinToString("&") {
+            "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}"
+        }
+        return "$base$path?$queryString&auth=$hash&t=$timestamp"
     }
 }

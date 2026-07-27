@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">LibreTV</string>
+    <string name="app_name">VidHub</string>
     <string name="search_title">搜索</string>
     <string name="settings_title">设置</string>
     <string name="server_list_title">我的服务器</string>

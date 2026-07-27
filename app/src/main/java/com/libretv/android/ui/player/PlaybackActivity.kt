@@ -6,14 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
 import com.libretv.android.R
-import com.libretv.android.model.ServerConfig
-import com.libretv.android.player.ProxyMediaSource
-import com.libretv.android.util.Sha256
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class PlaybackActivity : ComponentActivity() {
@@ -24,10 +22,6 @@ class PlaybackActivity : ComponentActivity() {
     private var videoTitle: String = ""
     private var episodeIndex: Int = 0
     private var episodeName: String? = null
-    private var videoId: String = ""
-
-    @Inject
-    lateinit var serverConfigProvider: () -> ServerConfig?
 
     private val viewModel: PlayerViewModel by viewModels()
 
@@ -59,23 +53,23 @@ class PlaybackActivity : ComponentActivity() {
                 )
                 .build()
 
-            val mediaSource = ProxyMediaSource.create(
-                mediaItem = mediaItem,
-                serverConfigProvider = serverConfigProvider
-            )
+            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("VidHub-Android/1.0")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(30000)
+
+            val mediaSource = HlsMediaSource.Factory(httpDataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(mediaItem)
 
             setMediaSource(mediaSource)
             prepare()
             playWhenReady = true
 
             addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    // Playback state tracking handled externally
-                }
-
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    // Track playback state changes
-                }
+                override fun onPlaybackStateChanged(playbackState: Int) {}
+                override fun onIsPlayingChanged(isPlaying: Boolean) {}
             })
         }
 

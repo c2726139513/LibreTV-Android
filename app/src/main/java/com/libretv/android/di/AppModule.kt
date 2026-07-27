@@ -3,12 +3,9 @@ package com.libretv.android.di
 import android.content.Context
 import com.libretv.android.data.local.ServerConfigStore
 import com.libretv.android.data.local.WatchHistoryStore
-import com.libretv.android.data.remote.LibreTVApi
-import com.libretv.android.data.remote.ProxyInterceptor
+import com.libretv.android.data.remote.VidHubApi
 import com.libretv.android.data.repository.VideoRepository
 import com.libretv.android.model.ServerConfig
-import com.libretv.android.player.ProxyDataSourceFactory
-import com.libretv.android.player.ProxyMediaSource
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -45,14 +42,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(
-        proxyInterceptor: ProxyInterceptor
-    ): OkHttpClient {
+    fun provideOkHttpClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
         return OkHttpClient.Builder()
-            .addInterceptor(proxyInterceptor)
             .addInterceptor(logging)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -71,15 +65,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideLibreTVApi(retrofit: Retrofit): LibreTVApi {
-        return retrofit.create(LibreTVApi::class.java)
-    }
-
-    @Provides
-    @Singleton
-    fun provideProxyInterceptor(
-        serverConfigProvider: () -> ServerConfig?
-    ): ProxyInterceptor {
-        return ProxyInterceptor(serverConfigProvider)
+    fun provideVidHubApi(retrofit: Retrofit): VidHubApi {
+        return retrofit.create(VidHubApi::class.java)
     }
 }

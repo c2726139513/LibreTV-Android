@@ -1,13 +1,17 @@
 # Retrofit
 -keepattributes Signature
 -keepattributes *Annotation*
--keep class com.libretv.android.data.remote.dto.** { *; }
+-keep class com.libretv.android.data.remote.** { *; }
 
-# Moshi
--keep class com.squareup.moshi.** { *; }
+# Moshi: keep generated @JsonClass adapters
+-keep class **._JsonAdapter { *; }
+-keep @com.squareup.moshi.JsonClass class * { *; }
 -keepclassmembers class * {
-    @com.squareup.moshi.Json name *;
+    @com.squareup.moshi.Json <fields>;
 }
+# KotlinJsonAdapterFactory needs @kotlin.Metadata
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class kotlin.Metadata { *; }
 
 # ExoPlayer
 -dontwarn androidx.media3.**

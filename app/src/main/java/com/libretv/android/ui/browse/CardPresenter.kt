@@ -6,6 +6,7 @@ import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import com.libretv.android.R
 import com.libretv.android.data.local.WatchHistoryItem
+import com.libretv.android.model.Episode
 import com.libretv.android.model.VideoItem
 
 class CardPresenter(
@@ -36,6 +37,10 @@ class CardPresenter(
             is WatchHistoryItem -> {
                 cardView.titleText = item.title
                 cardView.contentText = item.sourceName ?: ""
+            }
+            is Episode -> {
+                cardView.titleText = item.name
+                cardView.contentText = item.url
             }
         }
 

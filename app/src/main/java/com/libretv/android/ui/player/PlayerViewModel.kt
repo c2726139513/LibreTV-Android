@@ -1,11 +1,10 @@
 package com.libretv.android.ui.player
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.libretv.android.data.local.WatchHistoryItem
 import com.libretv.android.data.repository.VideoRepository
 import com.libretv.android.model.ServerConfig
-import com.libretv.android.util.Sha256
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +15,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val repository: VideoRepository
-) : androidx.lifecycle.ViewModel() {
+) : ViewModel() {
 
     private val _serverConfig = MutableStateFlow<ServerConfig?>(null)
     val serverConfig: StateFlow<ServerConfig?> = _serverConfig.asStateFlow()
@@ -44,7 +43,7 @@ class PlayerViewModel @Inject constructor(
                               position: Long, duration: Long) {
         viewModelScope.launch {
             val server = _serverConfig.value
-            val item = com.libretv.android.data.local.WatchHistoryItem(
+            val item = WatchHistoryItem(
                 videoId = videoId,
                 title = title,
                 coverUrl = coverUrl,
@@ -58,12 +57,5 @@ class PlayerViewModel @Inject constructor(
             )
             repository.saveWatchProgress(item)
         }
-    }
-
-    fun getAuthParams(): Pair<String, String>? {
-        val config = repository.getActiveServerSync() ?: return null
-        val hash = Sha256.hash(config.password)
-        val timestamp = System.currentTimeMillis().toString()
-        return Pair(hash, timestamp)
     }
 }

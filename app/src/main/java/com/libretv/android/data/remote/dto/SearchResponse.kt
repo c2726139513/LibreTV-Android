@@ -3,16 +3,13 @@ package com.libretv.android.data.remote.dto
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.libretv.android.model.VideoItem
-import com.libretv.android.model.Episode
 
 @JsonClass(generateAdapter = true)
 data class SearchResponse(
     @Json(name = "code") val code: Int,
     @Json(name = "list") val list: List<VodInfo>?,
-    @Json(name = "page") val page: Int?,
     @Json(name = "pagecount") val pagecount: Int?,
-    @Json(name = "total") val total: Int?,
-    @Json(name = "limit") val limit: Int?
+    @Json(name = "msg") val msg: String?
 )
 
 @JsonClass(generateAdapter = true)
@@ -32,7 +29,6 @@ data class VodInfo(
 )
 
 fun VodInfo.toVideoItem(): VideoItem {
-    val episodes = vodPlayUrl?.let { parseEpisodes(it) } ?: emptyList()
     return VideoItem(
         vodId = vodId,
         title = vodName,
@@ -44,16 +40,6 @@ fun VodInfo.toVideoItem(): VideoItem {
         actor = vodActor,
         typeName = typeName,
         description = vodContent,
-        playFrom = vodPlayFrom,
-        episodes = episodes
+        playFrom = vodPlayFrom
     )
-}
-
-fun parseEpisodes(playUrl: String): List<Episode> {
-    return playUrl.split("#").mapIndexedNotNull { index, segment ->
-        val parts = segment.split("$", limit = 2)
-        if (parts.size == 2) {
-            Episode(name = parts[0], url = parts[1], index = index)
-        } else null
-    }
 }
