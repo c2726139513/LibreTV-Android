@@ -1,29 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VidHub</string>
-    <string name="search_title">搜索</string>
-    <string name="settings_title">设置</string>
-    <string name="server_list_title">我的服务器</string>
-    <string name="continue_watching">继续观看</string>
-    <string name="favorites">收藏</string>
+
+    <!-- 首页 -->
+    <string name="row_servers">我的服务器</string>
+    <string name="row_continue_watching">继续观看</string>
+    <string name="row_favorites">我的收藏</string>
     <string name="add_server">添加服务器</string>
-    <string name="edit_server">编辑服务器</string>
-    <string name="delete_server">删除服务器</string>
-    <string name="server_url_hint">服务器地址</string>
-    <string name="server_password_hint">密码</string>
-    <string name="server_name_hint">服务器名称</string>
-    <string name="cms_source_hint">CMS 源地址（可选）</string>
-    <string name="save">保存</string>
-    <string name="cancel">取消</string>
-    <string name="play">播放</string>
-    <string name="no_results">暂无结果</string>
-    <string name="loading">加载中…</string>
-    <string name="search_hint">搜索视频名称</string>
-    <string name="error_no_server">请先在设置中添加服务器</string>
-    <string name="error_network">网络错误</string>
-    <string name="error_auth">鉴权失败，请检查密码</string>
-    <string name="confirm_delete">确认删除此服务器？</string>
-    <string name="confirm_clear_history">确认清除所有播放历史？</string>
-    <string name="server_connected">连接成功</string>
-    <string name="server_disconnected">连接失败</string>
+    <string name="manage_servers">管理服务器</string>
+
+    <!-- 搜索 -->
+    <string name="search_no_result">未找到相关影片</string>
+    <string name="search_no_server">请先在设置中添加并选中服务器</string>
+    <string name="search_auth_failed">服务器鉴权失败，请检查密码</string>
+
+    <!-- 详情 -->
+    <string name="action_favorite_add">收藏</string>
+    <string name="action_favorite_remove">取消收藏</string>
+    <string name="row_episodes">选集</string>
+
+    <!-- 播放器 -->
+    <string name="player_error">播放出错，请稍后重试</string>
+    <string name="player_episode_format">第 %1$d 集 / 共 %2$d 集</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">服务器管理</string>
+    <string name="settings_active">当前使用</string>
+    <string name="settings_action_set_active">设为当前服务器</string>
+    <string name="settings_action_edit">编辑</string>
+    <string name="settings_action_delete">删除</string>
+    <string name="settings_action_refresh_sources">刷新数据源</string>
+    <string name="settings_action_custom_sources">自定义数据源</string>
+    <string name="settings_add_server">添加服务器</string>
+
+    <!-- 服务器编辑 -->
+    <string name="server_edit_title_add">添加服务器</string>
+    <string name="server_edit_title_edit">编辑服务器</string>
+    <string name="server_field_name">名称</string>
+    <string name="server_field_url">服务器地址</string>
+    <string name="server_field_password">密码</string>
+    <string name="server_field_name_hint">例如：家里的大电视</string>
+    <string name="server_field_url_hint">https://your-vidhub.example.com</string>
+    <string name="server_field_password_hint">VidHub 部署的 PASSWORD</string>
+    <string name="server_save">保存</string>
+    <string name="server_cancel">取消</string>
+    <string name="server_verify_testing">正在验证服务器…</string>
+    <string name="server_verify_ok">验证通过</string>
+    <string name="server_verify_wrong_password">密码不正确</string>
+    <string name="server_verify_no_password">服务器未设置 PASSWORD，无法使用</string>
+    <string name="server_verify_network_error">无法连接服务器，请检查地址</string>
+    <string name="server_field_required">请填写完整信息</string>
+
+    <!-- 自定义数据源 -->
+    <string name="custom_sources_title">自定义数据源</string>
+    <string name="custom_source_add">添加数据源</string>
+    <string name="custom_source_empty">暂无自定义数据源</string>
+    <string name="custom_source_field_name">数据源名称</string>
+    <string name="custom_source_field_api">CMS API 地址</string>
+    <string name="custom_source_field_detail">网页详情地址（可选）</string>
+    <string name="custom_source_api_hint">https://example.com/api.php/provide/vod</string>
+    <string name="custom_source_detail_hint">留空则使用标准 API 详情模式</string>
+    <string name="custom_source_delete">删除该数据源</string>
 </resources>

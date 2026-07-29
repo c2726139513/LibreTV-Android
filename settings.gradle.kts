@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "VidHub"
+rootProject.name = "VidHub-Android"
 include(":app")

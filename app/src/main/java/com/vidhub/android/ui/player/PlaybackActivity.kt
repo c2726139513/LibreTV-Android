@@ -1,128 +1,166 @@
 package com.vidhub.android.ui.player
 
 import android.os.Bundle
-import android.view.KeyEvent
-import androidx.activity.ComponentActivity
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.core.content.IntentCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
 import com.vidhub.android.R
+import com.vidhub.android.model.VideoItem
+import com.vidhub.android.util.Constants
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
+/**
+ * 全屏播放页。
+ *
+ * 关键约定：视频 URL 来自 /api/detail，ExoPlayer 直连播放 M3U8，不走任何代理。
+ * 播放进度定时保存，退出时保存；一集播完自动连播下一集。
+ */
 @AndroidEntryPoint
-class PlaybackActivity : ComponentActivity() {
-
-    private lateinit var playerView: PlayerView
-    private var player: ExoPlayer? = null
-    private var videoUrl: String = ""
-    private var videoTitle: String = ""
-    private var episodeIndex: Int = 0
-    private var episodeName: String? = null
+class PlaybackActivity : FragmentActivity() {
 
     private val viewModel: PlayerViewModel by viewModels()
 
+    private var player: ExoPlayer? = null
+    private lateinit var playerView: PlayerView
+    private lateinit var titleView: TextView
+
+    private lateinit var videoItem: VideoItem
+    private var episodeUrls: List<String> = emptyList()
+    private var currentIndex: Int = 0
+    private var startPositionMs: Long = 0L
+
+    private var progressSaveJob: Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_player)
-
+        setContentView(R.layout.activity_playback)
         playerView = findViewById(R.id.player_view)
+        titleView = findViewById(R.id.player_title)
 
-        intent?.let {
-            videoUrl = it.getStringExtra("video_url") ?: ""
-            videoTitle = it.getStringExtra("video_title") ?: ""
-            episodeName = it.getStringExtra("episode_name")
-            episodeIndex = it.getIntExtra("episode_index", 0)
+        val item = IntentCompat.getParcelableExtra(
+            intent, Constants.EXTRA_VIDEO_ITEM, VideoItem::class.java,
+        )
+        val urls = intent.getStringArrayListExtra(Constants.EXTRA_EPISODE_URLS)
+        if (item == null || urls.isNullOrEmpty()) {
+            finish()
+            return
         }
+        videoItem = item
+        episodeUrls = urls
+        currentIndex = intent.getIntExtra(Constants.EXTRA_EPISODE_INDEX, 0)
+            .coerceIn(0, episodeUrls.size - 1)
+        startPositionMs = intent.getLongExtra(Constants.EXTRA_START_POSITION_MS, 0L)
 
-        initializePlayer()
+        viewModel.bind(videoItem, episodeUrls.size, currentIndex)
     }
 
-    private fun initializePlayer() {
-        player = ExoPlayer.Builder(this).build().apply {
-            val mediaItem = MediaItem.Builder()
-                .setUri(videoUrl)
-                .setMediaMetadata(
-                    androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(videoTitle)
-                        .setSubtitle(episodeName)
-                        .build()
-                )
-                .build()
-
-            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-                .setUserAgent("VidHub-Android/1.0")
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15000)
-                .setReadTimeoutMs(30000)
-
-            val mediaSource = HlsMediaSource.Factory(httpDataSourceFactory)
-                .setAllowChunklessPreparation(true)
-                .createMediaSource(mediaItem)
-
-            setMediaSource(mediaSource)
-            prepare()
-            playWhenReady = true
-
-            addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {}
-                override fun onIsPlayingChanged(isPlaying: Boolean) {}
-            })
-        }
-
-        playerView.player = player
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        return when (keyCode) {
-            KeyEvent.KEYCODE_BACK -> {
-                saveProgress()
-                finish()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER -> {
-                playerView.useController = !playerView.useController
-                true
-            }
-            else -> super.onKeyDown(keyCode, event)
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        saveProgress()
-        player?.pause()
+    override fun onStart() {
+        super.onStart()
+        initPlayer()
+        startProgressSaver()
     }
 
     override fun onStop() {
+        saveCurrentProgress()
+        progressSaveJob?.cancel()
+        progressSaveJob = null
+        releasePlayer()
         super.onStop()
-        releasePlayer()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        releasePlayer()
-    }
+    private fun initPlayer() {
+        val exo = ExoPlayer.Builder(this).build()
+        player = exo
+        playerView.player = exo
+        playerView.keepScreenOn = true
 
-    private fun saveProgress() {
-        player?.let { p ->
-            viewModel.savePlaybackProgress(
-                videoId = videoUrl,
-                title = videoTitle,
-                coverUrl = null,
-                episodeIndex = episodeIndex,
-                episodeName = episodeName,
-                position = p.currentPosition,
-                duration = p.duration
-            )
-        }
+        exo.setMediaItems(
+            episodeUrls.map { buildMediaItem(it) },
+            currentIndex,
+            startPositionMs,
+        )
+        exo.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val newIndex = exo.currentMediaItemIndex
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    // 上一集自然播完：记录到历史（归零），再切到新集
+                    viewModel.saveEpisodeFinished()
+                }
+                if (newIndex != currentIndex) {
+                    currentIndex = newIndex
+                    viewModel.episodeIndex = newIndex
+                    updateTitle()
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                Toast.makeText(
+                    this@PlaybackActivity,
+                    getString(R.string.player_error) + "：" + (error.errorCodeName),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        })
+        exo.prepare()
+        exo.playWhenReady = true
+        updateTitle()
     }
 
     private fun releasePlayer() {
+        playerView.player = null
         player?.release()
         player = null
+    }
+
+    /**
+     * 构造 MediaItem。部分 CMS 源的 M3U8 地址不带标准扩展名（如 ?type=m3u8 的 CDN 链接），
+     * 会导致 ExoPlayer 无法按路径推断 HLS 类型，这里显式标注。
+     */
+    private fun buildMediaItem(url: String): MediaItem {
+        return if (url.contains("m3u8", ignoreCase = true)) {
+            MediaItem.Builder()
+                .setUri(url)
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+                .build()
+        } else {
+            MediaItem.fromUri(url)
+        }
+    }
+
+    private fun updateTitle() {
+        titleView.text = "${videoItem.title}  " +
+            getString(R.string.player_episode_format, currentIndex + 1, episodeUrls.size)
+    }
+
+    private fun startProgressSaver() {
+        progressSaveJob?.cancel()
+        progressSaveJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(Constants.PLAYER_PROGRESS_SAVE_INTERVAL_MS)
+                saveCurrentProgress()
+            }
+        }
+    }
+
+    private fun saveCurrentProgress() {
+        val exo = player ?: return
+        val duration = exo.duration
+        viewModel.saveProgress(
+            positionMs = exo.currentPosition.coerceAtLeast(0L),
+            durationMs = if (duration > 0) duration else 0L,
+        )
     }
 }

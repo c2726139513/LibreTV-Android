@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_primary">#FF0D0D0D</color>
-    <color name="bg_dialog">#FF1C1C1C</color>
-    <color name="bg_card">#FF1A1A2E</color>
-    <color name="bg_input">#FF2A2A2A</color>
-    <color name="bg_button">#FF1E90FF</color>
+    <!-- 品牌色 -->
+    <color name="brand_primary">#1565C0</color>
+    <color name="brand_accent">#42A5F5</color>
 
-    <color name="text_primary">#FFFFFFFF</color>
-    <color name="text_secondary">#FFAAAAAA</color>
-    <color name="text_hint">#FF666666</color>
+    <!-- 背景 -->
+    <color name="app_background">#121418</color>
+    <color name="surface">#1E2126</color>
+    <color name="surface_focused">#2E3A4A</color>
 
-    <color name="accent">#FF1E90FF</color>
-    <color name="accent_dark">#FF1565C0</color>
+    <!-- 文字 -->
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#9AA5B1</color>
 
-    <color name="success">#FF4CAF50</color>
-    <color name="error">#FFEF5350</color>
-    <color name="warning">#FFFFA726</color>
+    <!-- 卡片 -->
+    <color name="card_background">#26292F</color>
+    <color name="card_background_focused">#3D4C63</color>
+    <color name="poster_placeholder">#2A2D33</color>
 
-    <color name="search_bg">@color/bg_primary</color>
-    <color name="search_input_bg">@color/bg_input</color>
-    <color name="search_hint">@color/text_hint</color>
-    <color name="search_button_bg">@color/bg_button</color>
+    <!-- 状态 -->
+    <color name="active_server_indicator">#4CAF50</color>
+    <color name="error">#EF5350</color>
 </resources>

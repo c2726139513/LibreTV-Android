@@ -1,75 +1,71 @@
 package com.vidhub.android.data.local
 
 import android.content.Context
-import com.vidhub.android.util.Constants
-import com.squareup.moshi.Json
-import com.squareup.moshi.JsonClass
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import kotlinx.coroutines.Dispatchers
+import com.squareup.moshi.Types
+import com.vidhub.android.model.WatchHistoryItem
+import com.vidhub.android.util.Constants
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
-import java.lang.reflect.ParameterizedType
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
-@JsonClass(generateAdapter = true)
-data class WatchHistoryItem(
-    @Json(name = "videoId") val videoId: String,
-    @Json(name = "title") val title: String,
-    @Json(name = "coverUrl") val coverUrl: String?,
-    @Json(name = "serverId") val serverId: String,
-    @Json(name = "episodeIndex") val episodeIndex: Int,
-    @Json(name = "episodeName") val episodeName: String?,
-    @Json(name = "position") val position: Long,
-    @Json(name = "duration") val duration: Long,
-    @Json(name = "lastWatched") val lastWatched: Long,
-    @Json(name = "sourceName") val sourceName: String?
-)
+private val Context.historyDataStore by preferencesDataStore(name = Constants.DATASTORE_HISTORY)
 
-class WatchHistoryStore(private val context: Context) {
-    private val moshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
-        .build()
-    private val listType = object : ParameterizedType {
-        override fun getRawType() = List::class.java
-        override fun getActualTypeArguments() = arrayOf(WatchHistoryItem::class.java)
-        override fun getOwnerType() = null
+/**
+ * 播放历史持久化（DataStore + JSON 列表）。
+ * 按更新时间倒序，超出上限时淘汰最旧记录。
+ */
+class WatchHistoryStore(
+    private val context: Context,
+    moshi: Moshi,
+) {
+
+    private val listAdapter = moshi.adapter<List<WatchHistoryItem>>(
+        Types.newParameterizedType(List::class.java, WatchHistoryItem::class.java)
+    )
+
+    /** 按最后观看时间倒序的历史列表 */
+    val history: Flow<List<WatchHistoryItem>> = context.historyDataStore.data.map { prefs ->
+        load(prefs[KEY_ITEMS]).sortedByDescending { it.updatedAt }
     }
-    private val adapter = moshi.adapter<List<WatchHistoryItem>>(listType)
-    private val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getRecentHistory(limit: Int = 20): Flow<List<WatchHistoryItem>> = flow {
-        val items = getHistoryList()
-        emit(items.sortedByDescending { it.lastWatched }.take(limit))
-    }.flowOn(Dispatchers.IO)
+    suspend fun get(key: String): WatchHistoryItem? =
+        history.first().firstOrNull { it.key == key }
 
-    suspend fun saveProgress(item: WatchHistoryItem) = withContext(Dispatchers.IO) {
-        val items = getHistoryList().toMutableList()
-        val existingIndex = items.indexOfFirst { it.videoId == item.videoId && it.episodeIndex == item.episodeIndex }
-        if (existingIndex >= 0) {
-            items[existingIndex] = item
-        } else {
-            items.add(item)
+    /** 写入/更新一条播放进度，并置顶到最前 */
+    suspend fun saveProgress(item: WatchHistoryItem) {
+        context.historyDataStore.edit { prefs ->
+            val current = load(prefs[KEY_ITEMS])
+                .filterNot { it.key == item.key }
+                .toMutableList()
+            current.add(item.copy(updatedAt = System.currentTimeMillis()))
+            val trimmed = current
+                .sortedByDescending { it.updatedAt }
+                .take(Constants.HISTORY_MAX_ITEMS)
+            prefs[KEY_ITEMS] = listAdapter.toJson(trimmed)
         }
-        prefs.edit().putString(Constants.WATCH_HISTORY_KEY, adapter.toJson(items)).apply()
     }
 
-    suspend fun deleteItem(videoId: String) = withContext(Dispatchers.IO) {
-        val items = getHistoryList().filter { it.videoId != videoId }
-        prefs.edit().putString(Constants.WATCH_HISTORY_KEY, adapter.toJson(items)).apply()
-    }
-
-    suspend fun clearAll() = withContext(Dispatchers.IO) {
-        prefs.edit().remove(Constants.WATCH_HISTORY_KEY).apply()
-    }
-
-    private fun getHistoryList(): List<WatchHistoryItem> {
-        val json = prefs.getString(Constants.WATCH_HISTORY_KEY, null) ?: return emptyList()
-        return try {
-            adapter.fromJson(json) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
+    suspend fun remove(key: String) {
+        context.historyDataStore.edit { prefs ->
+            val current = load(prefs[KEY_ITEMS]).filterNot { it.key == key }
+            prefs[KEY_ITEMS] = listAdapter.toJson(current)
         }
+    }
+
+    suspend fun clear() {
+        context.historyDataStore.edit { it.remove(KEY_ITEMS) }
+    }
+
+    private fun load(json: String?): List<WatchHistoryItem> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching { listAdapter.fromJson(json) }.getOrNull() ?: emptyList()
+    }
+
+    companion object {
+        private val KEY_ITEMS = stringPreferencesKey("items")
     }
 }

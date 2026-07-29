@@ -1,89 +1,103 @@
 package com.vidhub.android.ui.search
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidhub.android.data.repository.VideoRepository
 import com.vidhub.android.model.VideoItem
+import com.vidhub.android.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val repository: VideoRepository
+    private val repository: VideoRepository,
 ) : ViewModel() {
 
-    private val _searchResults = MutableStateFlow<List<VideoItem>>(emptyList())
-    val searchResults: StateFlow<List<VideoItem>> = _searchResults.asStateFlow()
+    data class SearchUiState(
+        val results: List<VideoItem> = emptyList(),
+        val searching: Boolean = false,
+        /** 已发起过至少一次搜索（用于区分"未搜索"与"无结果"） */
+        val hasSearched: Boolean = false,
+        val noServer: Boolean = false,
+        val authFailed: Boolean = false,
+        /** 请求失败的源数量（部分失败不影响结果展示） */
+        val failedSourceCount: Int = 0,
+    )
 
-    private val _isSearching = MutableStateFlow(false)
-    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+    private val _uiState = MutableStateFlow(SearchUiState())
+    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    private val queryFlow = MutableStateFlow("")
 
-    private var searchJob: Job? = null
-    private var currentPage = 1
-    private var currentQuery = ""
-
-    fun search(query: String) {
-        currentQuery = query
-        searchJob?.cancel()
-
-        if (query.isBlank()) {
-            _searchResults.value = emptyList()
-            return
-        }
-
-        searchJob = viewModelScope.launch {
-            _isSearching.value = true
-            _error.value = null
-            currentPage = 1
-            _searchResults.value = mutableListOf()
-
-            val server = repository.getActiveServerSync()
-            if (server == null) {
-                _error.value = "请先在设置中添加服务器"
-                _isSearching.value = false
-                return@launch
-            }
-
-            repository.search(server, query, currentPage)
-                .onSuccess { results ->
-                    _searchResults.value = results
-                    if (results.isEmpty()) {
-                        _error.value = "没有找到结果，请尝试其他关键词"
-                    }
-                }
-                .onFailure { e ->
-                    Log.e("SearchViewModel", "search failed", e)
-                    _error.value = e.message ?: "搜索失败(${e.javaClass.simpleName})"
-                }
-            _isSearching.value = false
+    init {
+        viewModelScope.launch {
+            queryFlow
+                .debounce { query -> if (query.isBlank()) 0L else Constants.SEARCH_DEBOUNCE_MS }
+                .distinctUntilChanged()
+                .collectLatest { query -> performSearch(query.trim()) }
         }
     }
 
-    fun loadMore() {
-        if (_isSearching.value || currentQuery.isBlank()) return
+    fun onQueryChanged(query: String) {
+        queryFlow.value = query
+    }
 
-        viewModelScope.launch {
-            _isSearching.value = true
-            currentPage++
+    fun onQuerySubmit(query: String) {
+        queryFlow.value = query
+    }
 
-            val server = repository.getActiveServerSync() ?: return@launch
-            repository.search(server, currentQuery, currentPage)
-                .onSuccess { results ->
-                    _searchResults.value = _searchResults.value + results
-                }
-                .onFailure {
-                    currentPage--
-                }
-            _isSearching.value = false
+    private suspend fun performSearch(query: String) {
+        if (query.isBlank()) {
+            _uiState.value = SearchUiState()
+            return
         }
+        val server = repository.getActiveServerSnapshot()
+        if (server == null) {
+            _uiState.update { it.copy(searching = false, hasSearched = true, noServer = true, results = emptyList()) }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                results = emptyList(),
+                searching = true,
+                hasSearched = true,
+                noServer = false,
+                authFailed = false,
+                failedSourceCount = 0,
+            )
+        }
+
+        // 多源聚合：按 stableKey 去重，结果随源返回渐进更新
+        val dedup = LinkedHashMap<String, VideoItem>()
+        var failed = 0
+        repository.search(server, query).collect { event ->
+            when (event) {
+                is VideoRepository.SearchEvent.SourceResult -> {
+                    event.items.forEach { item -> dedup.putIfAbsent(item.stableKey, item) }
+                    _uiState.update { it.copy(results = dedup.values.toList()) }
+                }
+                is VideoRepository.SearchEvent.SourceFailed -> {
+                    failed++
+                    _uiState.update { it.copy(failedSourceCount = failed) }
+                }
+                VideoRepository.SearchEvent.AuthFailed -> {
+                    _uiState.update { it.copy(authFailed = true, searching = false) }
+                    return@collect
+                }
+            }
+        }
+        _uiState.update { it.copy(searching = false) }
     }
 }

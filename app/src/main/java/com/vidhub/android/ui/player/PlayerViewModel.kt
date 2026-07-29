@@ -2,60 +2,44 @@ package com.vidhub.android.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.vidhub.android.data.local.WatchHistoryItem
 import com.vidhub.android.data.repository.VideoRepository
-import com.vidhub.android.model.ServerConfig
+import com.vidhub.android.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    private val repository: VideoRepository
+    private val repository: VideoRepository,
 ) : ViewModel() {
 
-    private val _serverConfig = MutableStateFlow<ServerConfig?>(null)
-    val serverConfig: StateFlow<ServerConfig?> = _serverConfig.asStateFlow()
+    private var item: VideoItem? = null
+    private var episodeCount: Int = 0
 
-    private val _isLoading = MutableStateFlow(true)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    /** 当前集下标，由 Activity 在切集时更新 */
+    var episodeIndex: Int = 0
 
-    init {
-        loadConfig()
+    fun bind(video: VideoItem, count: Int, startIndex: Int) {
+        if (item != null) return
+        item = video
+        episodeCount = count
+        episodeIndex = startIndex
     }
 
-    private fun loadConfig() {
+    /** 保存当前播放进度（接近结尾自动归零，由 repository 处理） */
+    fun saveProgress(positionMs: Long, durationMs: Long) {
+        val video = item ?: return
+        if (positionMs < 0) return
         viewModelScope.launch {
-            repository.getActiveServer().collect { config ->
-                _serverConfig.value = config
-                if (_isLoading.value) {
-                    _isLoading.value = false
-                }
-            }
+            repository.saveProgress(video, episodeIndex, episodeCount, positionMs, durationMs)
         }
     }
 
-    fun savePlaybackProgress(videoId: String, title: String, coverUrl: String?,
-                              episodeIndex: Int, episodeName: String?,
-                              position: Long, duration: Long) {
+    /** 某集自然播完：把下一集记为"当前看到"（位置 0） */
+    fun saveEpisodeFinished() {
+        val video = item ?: return
         viewModelScope.launch {
-            val server = _serverConfig.value
-            val item = WatchHistoryItem(
-                videoId = videoId,
-                title = title,
-                coverUrl = coverUrl,
-                serverId = server?.id ?: "",
-                episodeIndex = episodeIndex,
-                episodeName = episodeName,
-                position = position,
-                duration = duration,
-                lastWatched = System.currentTimeMillis(),
-                sourceName = server?.name
-            )
-            repository.saveWatchProgress(item)
+            repository.saveProgress(video, episodeIndex, episodeCount, 0L, 0L)
         }
     }
 }

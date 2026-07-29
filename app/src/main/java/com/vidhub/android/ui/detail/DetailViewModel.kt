@@ -2,73 +2,108 @@ package com.vidhub.android.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vidhub.android.data.local.ServerConfigStore
 import com.vidhub.android.data.repository.VideoRepository
-import com.vidhub.android.data.remote.dto.SourceInfo
-import com.vidhub.android.model.ServerConfig
+import com.vidhub.android.model.Episode
 import com.vidhub.android.model.VideoItem
+import com.vidhub.android.model.WatchHistoryItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DetailViewModel @Inject constructor(
-    private val repository: VideoRepository
+    private val repository: VideoRepository,
+    private val serverConfigStore: ServerConfigStore,
 ) : ViewModel() {
 
-    private val _video = MutableStateFlow<VideoItem?>(null)
-    val video: StateFlow<VideoItem?> = _video.asStateFlow()
+    data class DetailUiState(
+        val item: VideoItem? = null,
+        val episodes: List<Episode> = emptyList(),
+        val loading: Boolean = true,
+        val error: String? = null,
+        val history: WatchHistoryItem? = null,
+        val isFavorite: Boolean = false,
+        /** 播放按钮文案：有进度时为"续播 第N集" */
+        val playLabel: String = "播放",
+    )
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _uiState = MutableStateFlow(DetailUiState())
+    val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    fun load(item: VideoItem) {
+        if (_uiState.value.item != null) return
+        _uiState.update { it.copy(item = item) }
 
-    private val _selectedEpisode = MutableStateFlow<Int>(0)
-    val selectedEpisode: StateFlow<Int> = _selectedEpisode.asStateFlow()
-
-    fun loadDetail(vodId: String) {
+        // 收藏状态：持续观察本地存储
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
+            repository.favorites.collect { list ->
+                _uiState.update { state ->
+                    state.copy(isFavorite = list.any { it.key == item.stableKey })
+                }
+            }
+        }
 
-            val server = repository.getActiveServerSync()
+        // 播放进度：持续观察（播放返回后自动刷新"续播"文案）
+        viewModelScope.launch {
+            repository.history.collect { list ->
+                val history = list.firstOrNull { it.key == item.stableKey }
+                _uiState.update { state ->
+                    state.copy(
+                        history = history,
+                        playLabel = if (history != null && history.positionMs > 0L) {
+                            "续播 第${history.episodeIndex + 1}集"
+                        } else {
+                            "播放"
+                        },
+                    )
+                }
+            }
+        }
+
+        // 详情与剧集
+        viewModelScope.launch {
+            val server = serverConfigStore.getServer(item.serverId)
+                ?: serverConfigStore.getActiveServerSnapshot()
             if (server == null) {
-                _error.value = "请先配置服务器"
-                _isLoading.value = false
+                _uiState.update { it.copy(loading = false, error = "服务器不存在，请重新配置") }
                 return@launch
             }
-
-            val apiUrl = resolveFirstSourceUrl(server)
-            repository.detail(server, vodId, apiUrl)
-                .onSuccess { videoItem ->
-                    _video.value = videoItem
+            try {
+                val detail = repository.detail(server, item)
+                val info = detail.info
+                _uiState.update { state ->
+                    val current = state.item ?: item
+                    val merged = current.copy(
+                        title = info?.title?.takeIf { t -> t.isNotBlank() } ?: current.title,
+                        coverUrl = info?.cover?.takeIf { c -> c.isNotBlank() } ?: current.coverUrl,
+                        description = info?.desc?.takeIf { d -> d.isNotBlank() } ?: current.description,
+                        typeName = info?.type ?: current.typeName,
+                        year = info?.year ?: current.year,
+                        area = info?.area ?: current.area,
+                        director = info?.director ?: current.director,
+                        actor = info?.actor ?: current.actor,
+                        remarks = info?.remarks ?: current.remarks,
+                    )
+                    state.copy(
+                        item = merged,
+                        episodes = detail.episodes,
+                        loading = false,
+                        error = if (detail.episodes.isEmpty()) "暂无可播放剧集" else null,
+                    )
                 }
-                .onFailure { e ->
-                    _error.value = e.message ?: "加载详情失败"
-                }
-            _isLoading.value = false
+            } catch (e: Exception) {
+                _uiState.update { it.copy(loading = false, error = e.message ?: "加载失败") }
+            }
         }
     }
 
-    fun selectEpisode(index: Int) {
-        _selectedEpisode.value = index
-    }
-
-    private fun resolveFirstSourceUrl(server: ServerConfig): String? {
-        val sources = repository.getCachedSources(server.url.trimEnd('/'))
-        server.enabledSources.firstOrNull()?.let { key ->
-            sources.find { it.key == key }?.let { return it.api }
-        }
-        return server.customSources.firstOrNull()?.url
-    }
-
-    fun getCurrentEpisodeUrl(): String? {
-        val video = _video.value ?: return null
-        val episode = video.episodes.getOrNull(_selectedEpisode.value) ?: return null
-        return episode.url
+    fun toggleFavorite() {
+        val item = _uiState.value.item ?: return
+        viewModelScope.launch { repository.toggleFavorite(item) }
     }
 }

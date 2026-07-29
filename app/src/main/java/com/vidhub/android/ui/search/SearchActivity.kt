@@ -1,23 +1,20 @@
-package com.vidhub.android
+package com.vidhub.android.ui.search
 
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
-import com.vidhub.android.ui.browse.BrowseFragment
+import com.vidhub.android.R
 import dagger.hilt.android.AndroidEntryPoint
 
-/**
- * Leanback 入口 Activity，加载首页 [BrowseFragment]。
- */
 @AndroidEntryPoint
-class MainActivity : FragmentActivity() {
+class SearchActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_search)
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.main_container, BrowseFragment())
+                .replace(R.id.search_container, SearchFragment())
                 .commit()
         }
     }

@@ -3,29 +3,28 @@ package com.vidhub.android.ui.detail
 import androidx.leanback.widget.AbstractDetailsDescriptionPresenter
 import com.vidhub.android.model.VideoItem
 
+/**
+ * 详情页文字区：标题 / 副标题（年份·地区·类型·来源）/ 正文（导演·主演·简介）。
+ */
 class DetailsDescriptionPresenter : AbstractDetailsDescriptionPresenter() {
 
     override fun onBindDescription(viewHolder: ViewHolder, item: Any) {
-        when (item) {
-            is VideoItem -> {
-                viewHolder.title.text = item.title
+        val video = item as VideoItem
 
-                val subtitle = buildString {
-                    item.year?.let { append("$it ") }
-                    item.area?.let { append(" | $it") }
-                    item.typeName?.let { append(" | $it") }
-                    item.remarks?.let { append(" | $it") }
-                }
-                viewHolder.subtitle.text = subtitle.trim()
+        viewHolder.title.text = video.title
 
-                val body = buildString {
-                    item.director?.let { append("导演: $it\n") }
-                    item.actor?.let { append("主演: $it\n") }
-                    item.description?.let { append("\n$it") }
-                    item.playFrom?.let { append("\n\n来源: $it") }
-                }
-                viewHolder.body.text = body.trim()
-            }
-        }
+        viewHolder.subtitle.text = listOfNotNull(
+            video.year?.takeIf { it.isNotBlank() },
+            video.area?.takeIf { it.isNotBlank() },
+            video.typeName?.takeIf { it.isNotBlank() },
+            video.remarks?.takeIf { it.isNotBlank() },
+            video.sourceName.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+
+        viewHolder.body.text = buildString {
+            video.director?.takeIf { it.isNotBlank() }?.let { append("导演：$it\n") }
+            video.actor?.takeIf { it.isNotBlank() }?.let { append("主演：$it\n\n") }
+            append(video.description?.trim().orEmpty())
+        }.trim()
     }
 }

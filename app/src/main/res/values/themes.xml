@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.VidHub" parent="Theme.Leanback">
-        <item name="android:windowBackground">@color/bg_primary</item>
-        <item name="android:colorPrimary">@color/accent</item>
-        <item name="android:colorPrimaryDark">@color/bg_primary</item>
-        <item name="android:colorAccent">@color/accent</item>
-        <item name="android:colorBackground">@color/bg_primary</item>
-        <item name="android:statusBarColor">@color/bg_primary</item>
-        <item name="android:navigationBarColor">@color/bg_primary</item>
-    </style>
 
+    <style name="Theme.VidHub" parent="Theme.Leanback">
+        <item name="colorAccent">@color/brand_accent</item>
+        <item name="android:colorBackground">@color/app_background</item>
+        <item name="android:windowBackground">@color/app_background</item>
+    </style>
 </resources>

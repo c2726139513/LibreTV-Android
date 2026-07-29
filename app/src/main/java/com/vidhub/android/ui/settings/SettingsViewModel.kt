@@ -2,111 +2,67 @@ package com.vidhub.android.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.vidhub.android.data.remote.dto.SourceInfo
-import com.vidhub.android.data.repository.FetchSourcesResult
+import com.vidhub.android.data.local.ServerConfigStore
+import com.vidhub.android.data.local.SourcesCacheStore
 import com.vidhub.android.data.repository.VideoRepository
-import com.vidhub.android.model.CustomSource
 import com.vidhub.android.model.ServerConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val repository: VideoRepository
+    private val serverConfigStore: ServerConfigStore,
+    private val sourcesCacheStore: SourcesCacheStore,
+    private val repository: VideoRepository,
 ) : ViewModel() {
 
-    private val _servers = MutableStateFlow<List<ServerConfig>>(emptyList())
-    val servers: StateFlow<List<ServerConfig>> = _servers.asStateFlow()
+    data class SettingsState(
+        val servers: List<ServerConfig> = emptyList(),
+        val activeServerId: String? = null,
+    )
 
-    private val _activeServerId = MutableStateFlow<String?>(null)
-    val activeServerId: StateFlow<String?> = _activeServerId.asStateFlow()
+    val state: StateFlow<SettingsState> = combine(
+        serverConfigStore.servers,
+        serverConfigStore.activeServerId,
+    ) { servers, activeId -> SettingsState(servers, activeId) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsState())
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    init {
-        loadServers()
+    sealed interface Event {
+        data class Message(val text: String) : Event
     }
 
-    fun loadServers() {
+    private val _events = MutableSharedFlow<Event>()
+    val events: SharedFlow<Event> = _events
+
+    fun setActive(server: ServerConfig) {
+        serverConfigStore.setActiveServer(server.id)
+        viewModelScope.launch { _events.emit(Event.Message("已切换到「${server.name}」")) }
+    }
+
+    fun delete(server: ServerConfig) {
         viewModelScope.launch {
-            _isLoading.value = true
-            repository.getServers().catch { }.collect { serverList ->
-                _servers.value = serverList
-                _activeServerId.value = serverList.find { it.isActive }?.id
+            serverConfigStore.removeServer(server.id)
+            sourcesCacheStore.remove(server.id)
+            _events.emit(Event.Message("已删除「${server.name}」"))
+        }
+    }
+
+    /** 从服务端拉取最新数据源列表并缓存 */
+    fun refreshSources(server: ServerConfig) {
+        viewModelScope.launch {
+            try {
+                val sources = repository.refreshSources(server)
+                _events.emit(Event.Message("「${server.name}」数据源已更新：${sources.size} 个"))
+            } catch (e: Exception) {
+                _events.emit(Event.Message("刷新失败：${e.message ?: "未知错误"}"))
             }
-            _isLoading.value = false
-        }
-    }
-
-    fun addServer(name: String, url: String, password: String) {
-        viewModelScope.launch {
-            val config = ServerConfig(
-                name = name,
-                url = url,
-                password = password,
-                isActive = _servers.value.isEmpty()
-            )
-            repository.addServer(config)
-            loadServers()
-        }
-    }
-
-    fun updateServer(id: String, name: String, url: String, password: String) {
-        viewModelScope.launch {
-            val existing = _servers.value.find { it.id == id }
-            val config = ServerConfig(
-                id = id,
-                name = name,
-                url = url,
-                password = password,
-                isActive = existing?.isActive ?: false,
-                enabledSources = existing?.enabledSources ?: emptyList(),
-                customSources = existing?.customSources ?: emptyList(),
-                addedAt = existing?.addedAt ?: System.currentTimeMillis()
-            )
-            repository.updateServer(config)
-            loadServers()
-        }
-    }
-
-    suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
-        return repository.fetchSources(server)
-    }
-
-    fun updateServerSources(
-        serverId: String,
-        enabledSources: List<String>,
-        customSources: List<CustomSource>
-    ) {
-        viewModelScope.launch {
-            repository.updateServerSources(serverId, enabledSources, customSources)
-            loadServers()
-        }
-    }
-
-    fun removeServer(id: String) {
-        viewModelScope.launch {
-            repository.removeServer(id)
-            loadServers()
-        }
-    }
-
-    fun setActiveServer(id: String) {
-        viewModelScope.launch {
-            repository.setActiveServer(id)
-            loadServers()
-        }
-    }
-
-    fun clearWatchHistory() {
-        viewModelScope.launch {
-            repository.clearWatchHistory()
         }
     }
 }

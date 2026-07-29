@@ -1,245 +1,293 @@
 package com.vidhub.android.data.repository
 
+import com.vidhub.android.data.local.FavoritesStore
 import com.vidhub.android.data.local.ServerConfigStore
-import com.vidhub.android.data.local.WatchHistoryItem
+import com.vidhub.android.data.local.SourcesCacheStore
 import com.vidhub.android.data.local.WatchHistoryStore
-import android.util.Log
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.vidhub.android.data.remote.VidHubApi
-import com.vidhub.android.data.remote.dto.DetailResponse
-import com.vidhub.android.data.remote.dto.SearchResponse
-import com.vidhub.android.data.remote.dto.SourceInfo
-import com.vidhub.android.data.remote.dto.SourcesResponse
+import com.vidhub.android.data.remote.dto.VideoInfoDto
 import com.vidhub.android.data.remote.dto.toVideoItem
-import com.vidhub.android.model.CustomSource
+import com.vidhub.android.model.ApiSource
 import com.vidhub.android.model.Episode
+import com.vidhub.android.model.FavoriteItem
 import com.vidhub.android.model.ServerConfig
 import com.vidhub.android.model.VideoItem
+import com.vidhub.android.model.WatchHistoryItem
+import com.vidhub.android.util.Constants
 import com.vidhub.android.util.Sha256
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.IOException
-import java.net.URLEncoder
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Result wrapper for [VideoRepository.fetchSources] that carries error detail. */
-sealed class FetchSourcesResult {
-    data class Success(val sources: List<SourceInfo>) : FetchSourcesResult()
-    data class Error(val message: String) : FetchSourcesResult()
-}
+/** API 层错误（code 来自 VidHub 响应体或 HTTP 状态码） */
+class ApiException(val code: Int, message: String?) : Exception(message ?: "请求失败（$code）")
 
+/**
+ * 统一数据出口。
+ *
+ * 关键约定（见 AGENTS.md）：
+ * 1. auth 参数在 [buildVidHubUrl] 中统一构造（auth=sha256(password)&t=timestamp），
+ *    不使用拦截器，也不修改视频流地址。
+ * 2. 搜索/详情走 VidHub 服务端 API（/api/search、/api/detail），不直连第三方 CMS。
+ * 3. 视频播放地址由详情接口原样返回，ExoPlayer 直连播放，无代理。
+ */
 @Singleton
 class VideoRepository @Inject constructor(
     private val api: VidHubApi,
-    private val okHttp: OkHttpClient,
     private val serverConfigStore: ServerConfigStore,
-    private val watchHistoryStore: WatchHistoryStore
+    private val sourcesCacheStore: SourcesCacheStore,
+    private val watchHistoryStore: WatchHistoryStore,
+    private val favoritesStore: FavoritesStore,
 ) {
-    // In-memory cache of server source lists (keyed by server URL)
-    private var sourcesCache: Map<String, List<SourceInfo>> = emptyMap()
 
-    private val jsonMoshi: Moshi by lazy {
-        Moshi.Builder()
-            .addLast(KotlinJsonAdapterFactory())
-            .build()
+    // ==================== URL 构造 ====================
+
+    /**
+     * 构造带鉴权参数的 VidHub API URL。
+     * 例：{server}/api/search?wd=xx&apiUrl=xx&auth=sha256(pwd)&t=1712345678901
+     */
+    fun buildVidHubUrl(
+        server: ServerConfig,
+        path: String,
+        params: Map<String, String?> = emptyMap(),
+    ): String {
+        val builder = (server.baseUrl + "/" + path.trimStart('/')).toHttpUrl().newBuilder()
+        params.forEach { (key, value) -> value?.let { builder.addQueryParameter(key, it) } }
+        builder.addQueryParameter("auth", Sha256.hex(server.password))
+        builder.addQueryParameter("t", System.currentTimeMillis().toString())
+        return builder.build().toString()
     }
 
-    fun getServers(): Flow<List<ServerConfig>> = serverConfigStore.getServers()
+    // ==================== 服务器 ====================
 
-    fun getActiveServer(): Flow<ServerConfig?> = serverConfigStore.getActiveServer()
+    val servers: Flow<List<ServerConfig>> = serverConfigStore.servers
 
-    fun getActiveServerSync(): ServerConfig? = serverConfigStore.getActiveServerSync()
+    /** 当前选中服务器（未配置时为 null） */
+    val activeServer: Flow<ServerConfig?> =
+        combine(serverConfigStore.servers, serverConfigStore.activeServerId) { list, activeId ->
+            list.firstOrNull { it.id == activeId } ?: list.firstOrNull()
+        }
 
-    suspend fun addServer(config: ServerConfig) = serverConfigStore.addServer(config)
+    fun getActiveServerSnapshot(): ServerConfig? = serverConfigStore.getActiveServerSnapshot()
 
-    suspend fun updateServer(config: ServerConfig) = serverConfigStore.updateServer(config)
+    // ==================== 数据源 ====================
 
-    suspend fun removeServer(id: String) = serverConfigStore.removeServer(id)
+    /** 从服务端拉取最新内置源列表并写入缓存 */
+    suspend fun refreshSources(server: ServerConfig): List<ApiSource> {
+        val response = api.getSources(buildVidHubUrl(server, "api/sources"))
+        if (response.code != 200) throw ApiException(response.code, response.msg)
+        val sources = response.sources.orEmpty().map { ApiSource(key = it.key, name = it.name, api = it.api) }
+        sourcesCacheStore.put(server.id, sources)
+        return sources
+    }
 
-    suspend fun setActiveServer(id: String) = serverConfigStore.setActiveServer(id)
+    /**
+     * 获取某服务器可用的全部数据源：内置源（缓存优先，无缓存时在线拉取）+ 用户自定义源。
+     */
+    suspend fun getSources(server: ServerConfig): List<ApiSource> {
+        val cached = sourcesCacheStore.get(server.id)
+        val builtin = cached.ifEmpty {
+            runCatching { refreshSources(server) }.getOrDefault(emptyList())
+        }
+        return builtin + serverConfigStore.getCustomSources(server.id)
+    }
 
-    suspend fun fetchSources(server: ServerConfig): FetchSourcesResult {
-        return try {
-            Log.d("VideoRepository", "Step 1: building URL...")
-            val url = buildVidHubUrl(server, "/api/sources", emptyMap())
-            Log.d("VideoRepository", "Step 2: calling API from: ${url.take(100)}...")
-            val request = Request.Builder().url(url).build()
-            val call = okHttp.newCall(request)
-            val httpResponse = withContext(Dispatchers.IO) { call.execute() }
-            Log.d("VideoRepository", "Step 3: HTTP ${httpResponse.code}")
-            val json = httpResponse.body?.string() ?: ""
-            Log.d("VideoRepository", "Step 4: Raw response: ${json.take(200)}")
-            val adapter = jsonMoshi.adapter(SourcesResponse::class.java)
-            val parsed = adapter.fromJson(json)
-            if (parsed == null) {
-                FetchSourcesResult.Error("服务器返回空响应")
-            } else if (parsed.code == 200 && parsed.sources != null) {
-                sourcesCache = sourcesCache + (server.url.trimEnd('/') to parsed.sources)
-                FetchSourcesResult.Success(parsed.sources)
-            } else {
-                val msg = parsed.msg ?: "服务器返回状态码 ${parsed.code}"
-                Log.w("VideoRepository", "/api/sources returned code=${parsed.code}: $msg")
-                FetchSourcesResult.Error(msg)
+    // ==================== 搜索 ====================
+
+    sealed interface SearchEvent {
+        /** 某个源成功返回一批结果 */
+        data class SourceResult(
+            val source: ApiSource,
+            val items: List<VideoItem>,
+            val pageCount: Int,
+        ) : SearchEvent
+
+        /** 某个源请求失败（网络错误或上游错误），不影响其他源 */
+        data class SourceFailed(val source: ApiSource, val reason: String) : SearchEvent
+
+        /** 鉴权失败（HTTP 401）：密码错误，本次搜索应中止 */
+        data object AuthFailed : SearchEvent
+    }
+
+    /**
+     * 聚合搜索：并发请求服务器的所有数据源，结果随源返回逐步发射。
+     * 单个源失败不影响整体；遇到 401 时发射 [SearchEvent.AuthFailed] 并结束。
+     */
+    fun search(server: ServerConfig, keyword: String): Flow<SearchEvent> = channelFlow {
+        val sources = getSources(server).take(Constants.SEARCH_MAX_SOURCES)
+        if (sources.isEmpty()) return@channelFlow
+
+        val queue = Channel<ApiSource>(capacity = Channel.UNLIMITED)
+        sources.forEach { queue.trySend(it) }
+        queue.close()
+
+        // 任一源返回 401 时置位，其余 worker 停止取新任务
+        val authFailed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        val workerCount = minOf(Constants.SEARCH_MAX_CONCURRENT_SOURCES, sources.size)
+        coroutineScope {
+            repeat(workerCount) {
+                launch {
+                    for (source in queue) {
+                        if (authFailed.get()) break
+                        val event = runCatching {
+                            val url = buildVidHubUrl(
+                                server, "api/search",
+                                mapOf("wd" to keyword, "apiUrl" to source.api, "pg" to "1"),
+                            )
+                            val response = api.search(url)
+                            if (response.code == 200) {
+                                val items = response.list.orEmpty()
+                                    .mapNotNull { it.toVideoItem(source.name, source.api, server.id) }
+                                SearchEvent.SourceResult(source, items, response.pagecount ?: 1)
+                            } else {
+                                SearchEvent.SourceFailed(source, response.msg ?: "错误码 ${response.code}")
+                            }
+                        }.getOrElse { error ->
+                            if (error is HttpException && error.code() == 401) {
+                                SearchEvent.AuthFailed
+                            } else {
+                                SearchEvent.SourceFailed(source, error.message ?: "网络错误")
+                            }
+                        }
+                        send(event)
+                        if (event is SearchEvent.AuthFailed) {
+                            authFailed.set(true)
+                            break
+                        }
+                    }
+                }
             }
-        } catch (e: IOException) {
-            Log.e("VideoRepository", "fetchSources network error", e)
-            FetchSourcesResult.Error("网络错误: ${e.localizedMessage ?: e.message ?: "未知错误"}")
-        } catch (e: Exception) {
-            Log.e("VideoRepository", "fetchSources unexpected error", e)
-            val stack = e.stackTraceToString().substringBefore('\n')
-            FetchSourcesResult.Error("${e.javaClass.simpleName}: ${e.message}\n$stack")
         }
     }
 
-    /** Get cached sources for a server URL. */
-    fun getCachedSources(serverUrl: String): List<SourceInfo> {
-        return sourcesCache[serverUrl.trimEnd('/')] ?: emptyList()
+    // ==================== 详情 ====================
+
+    data class Detail(
+        val info: VideoInfoDto?,
+        val episodes: List<Episode>,
+        val detailUrl: String?,
+    )
+
+    /**
+     * 获取视频详情与剧集列表。
+     * 若条目来自带"网页详情地址"的自定义源，自动改用服务端网页抓取模式（customDetail 参数）。
+     */
+    suspend fun detail(server: ServerConfig, item: VideoItem): Detail {
+        val customDetail = serverConfigStore.getCustomSources(server.id)
+            .firstOrNull { it.api == item.sourceApi }
+            ?.detailUrl
+            ?.takeIf { it.isNotBlank() }
+        val response = try {
+            api.detail(
+                buildVidHubUrl(
+                    server, "api/detail",
+                    mapOf("id" to item.vodId, "apiUrl" to item.sourceApi, "customDetail" to customDetail),
+                )
+            )
+        } catch (e: HttpException) {
+            throw ApiException(e.code(), if (e.code() == 401) "鉴权失败，请检查服务器密码" else e.message())
+        }
+        if (response.code != 200) throw ApiException(response.code, response.msg)
+        return Detail(
+            info = response.videoInfo,
+            episodes = Episode.fromUrls(response.episodes.orEmpty()),
+            detailUrl = response.detailUrl,
+        )
     }
 
-    /** Update a server's enabled sources and custom sources. */
-    suspend fun updateServerSources(
-        serverId: String,
-        enabledSources: List<String>,
-        customSources: List<CustomSource>
+    // ==================== 服务器密码校验 ====================
+
+    enum class VerifyResult {
+        /** 密码正确，可以使用 */
+        OK,
+
+        /** 服务器可达，但密码不匹配 */
+        WRONG_PASSWORD,
+
+        /** 服务器未配置 PASSWORD 环境变量（该实例无法对外提供服务） */
+        NO_PASSWORD_ON_SERVER,
+
+        /** 网络不可达或响应异常 */
+        NETWORK_ERROR,
+    }
+
+    /** 通过 /api/env/password 返回的哈希校验用户输入的密码 */
+    suspend fun verifyServer(serverUrl: String, password: String): VerifyResult {
+        val base = serverUrl.trim().trimEnd('/')
+            .let { if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it" }
+        return try {
+            val response = api.getPasswordHash("$base/api/env/password")
+            when {
+                response.hash == null -> VerifyResult.NO_PASSWORD_ON_SERVER
+                response.hash.equals(Sha256.hex(password), ignoreCase = true) -> VerifyResult.OK
+                else -> VerifyResult.WRONG_PASSWORD
+            }
+        } catch (e: Exception) {
+            VerifyResult.NETWORK_ERROR
+        }
+    }
+
+    // ==================== 播放历史 ====================
+
+    val history: Flow<List<WatchHistoryItem>> = watchHistoryStore.history
+
+    suspend fun getHistory(key: String): WatchHistoryItem? = watchHistoryStore.get(key)
+
+    suspend fun saveProgress(
+        item: VideoItem,
+        episodeIndex: Int,
+        episodeCount: Int,
+        positionMs: Long,
+        durationMs: Long,
     ) {
-        val server = serverConfigStore.getServerById(serverId) ?: return
-        serverConfigStore.updateServer(
-            server.copy(
-                enabledSources = enabledSources,
-                customSources = customSources
+        // 接近结尾视为看完，下次从头播
+        val nearEnd = durationMs > 0 && durationMs - positionMs < Constants.HISTORY_NEAR_END_MS
+        watchHistoryStore.saveProgress(
+            WatchHistoryItem(
+                key = item.stableKey,
+                vodId = item.vodId,
+                sourceApi = item.sourceApi,
+                serverId = item.serverId,
+                title = item.title,
+                coverUrl = item.coverUrl,
+                episodeIndex = episodeIndex,
+                episodeCount = episodeCount,
+                positionMs = if (nearEnd) 0L else positionMs,
+                durationMs = durationMs,
             )
         )
     }
 
-    suspend fun search(server: ServerConfig, keyword: String, page: Int = 1): Result<List<VideoItem>> {
-        return try {
-            val cmsUrls = mutableListOf<String>()
-            val enabledKeys = server.enabledSources
-            if (enabledKeys.isNotEmpty()) {
-                val sources = getCachedSources(server.url.trimEnd('/'))
-                enabledKeys.forEach { key ->
-                    sources.find { it.key == key }?.let { cmsUrls.add(it.api) }
-                }
-            }
-            server.customSources.forEach { cmsUrls.add(it.url) }
+    suspend fun removeHistory(key: String) = watchHistoryStore.remove(key)
 
-            if (cmsUrls.isEmpty()) {
-                Log.w("VideoRepository", "search: no enabled sources for ${server.name}")
-                return@search Result.success(emptyList())
-            }
+    suspend fun clearHistory() = watchHistoryStore.clear()
 
-            val results = cmsUrls.mapNotNull { cmsUrl ->
-                val params = mutableMapOf(
-                    "wd" to keyword,
-                    "pg" to page.toString()
-                )
-                if (cmsUrl.isNotBlank()) {
-                    params["apiUrl"] = cmsUrl
-                }
-                val apiUrl = buildVidHubUrl(server, "/api/search", params)
-                Log.d("VideoRepository", "search: calling ${apiUrl.take(120)}...")
+    // ==================== 收藏 ====================
 
-                val request = Request.Builder().url(apiUrl).build()
-                val httpResponse = withContext(Dispatchers.IO) {
-                    okHttp.newCall(request).execute()
-                }
-                val json = httpResponse.body?.string() ?: ""
-                if (httpResponse.code != 200) {
-                    Log.w("VideoRepository", "search: HTTP ${httpResponse.code} for ${apiUrl.take(80)}...")
-                    return@mapNotNull null
-                }
+    val favorites: Flow<List<FavoriteItem>> = favoritesStore.favorites
 
-                val adapter = jsonMoshi.adapter(SearchResponse::class.java)
-                val parsed = adapter.fromJson(json)
-                if (parsed == null) {
-                    Log.w("VideoRepository", "search: null parse for ${apiUrl.take(80)}...")
-                    emptyList()
-                } else if (parsed.code == 200) {
-                    parsed.list?.map { it.toVideoItem() } ?: emptyList()
-                } else {
-                    Log.w("VideoRepository", "search: API code=${parsed.code} msg=${parsed.msg}")
-                    emptyList()
-                }
-            }
-            Result.success(results.flatten())
-        } catch (e: Exception) {
-            Log.e("VideoRepository", "search error for '${keyword}'", e)
-            Result.failure(e)
-        }
-    }
+    suspend fun isFavorite(key: String): Boolean = favoritesStore.isFavorite(key)
 
-    suspend fun detail(server: ServerConfig, vodId: String, apiUrl: String? = null): Result<VideoItem?> {
-        return try {
-            val params = mutableMapOf("id" to vodId)
-            if (!apiUrl.isNullOrBlank()) {
-                params["apiUrl"] = apiUrl
-            }
-            val url = buildVidHubUrl(server, "/api/detail", params)
-            Log.d("VideoRepository", "detail: calling ${url.take(120)}...")
+    /** 切换收藏，返回切换后是否已收藏 */
+    suspend fun toggleFavorite(item: VideoItem): Boolean = favoritesStore.toggle(
+        FavoriteItem(
+            key = item.stableKey,
+            vodId = item.vodId,
+            sourceApi = item.sourceApi,
+            serverId = item.serverId,
+            title = item.title,
+            coverUrl = item.coverUrl,
+            remarks = item.remarks,
+        )
+    )
 
-            val request = Request.Builder().url(url).build()
-            val httpResponse = withContext(Dispatchers.IO) {
-                okHttp.newCall(request).execute()
-            }
-            val json = httpResponse.body?.string() ?: ""
-            if (httpResponse.code != 200) {
-                Log.w("VideoRepository", "detail: HTTP ${httpResponse.code} for ${url.take(80)}...")
-                return@detail Result.success(null)
-            }
-
-            val adapter = jsonMoshi.adapter(DetailResponse::class.java)
-            val response = adapter.fromJson(json)
-            if (response != null && response.code == 200 && response.videoInfo != null) {
-                val info = response.videoInfo
-                val episodes = response.episodes?.mapIndexed { index, url ->
-                    Episode(name = "第${index + 1}集", url = url, index = index)
-                } ?: emptyList()
-                val videoItem = VideoItem(
-                    vodId = vodId,
-                    title = info.title ?: "",
-                    coverUrl = info.cover,
-                    remarks = info.remarks,
-                    year = info.year,
-                    area = info.area,
-                    director = info.director,
-                    actor = info.actor,
-                    typeName = info.type,
-                    description = info.desc,
-                    playFrom = info.sourceName
-                )
-                Result.success(videoItem.copy(episodes = episodes))
-            } else {
-                Result.success(null)
-            }
-        } catch (e: Exception) {
-            Log.e("VideoRepository", "detail error for vodId='${vodId}'", e)
-            Result.failure(e)
-        }
-    }
-
-    fun getWatchHistory(limit: Int = 20): Flow<List<WatchHistoryItem>> =
-        watchHistoryStore.getRecentHistory(limit)
-
-    suspend fun saveWatchProgress(item: WatchHistoryItem) =
-        watchHistoryStore.saveProgress(item)
-
-    suspend fun clearWatchHistory() = watchHistoryStore.clearAll()
-
-    fun buildVidHubUrl(server: ServerConfig, path: String, params: Map<String, String>): String {
-        val base = server.url.trimEnd('/')
-        val timestamp = System.currentTimeMillis()
-        val hash = Sha256.hash(server.password)
-        val queryParts = mutableListOf<String>()
-        queryParts.addAll(params.entries.map {
-            "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}"
-        })
-        queryParts.add("auth=$hash")
-        queryParts.add("t=$timestamp")
-        return "$base$path?${queryParts.joinToString("&")}"
-    }
+    suspend fun removeFavorite(key: String) = favoritesStore.remove(key)
 }
