@@ -20,6 +20,12 @@
 -keep,allowobfuscation,allowshrinking interface retrofit2.Call
 -keep,allowobfuscation,allowshrinking class retrofit2.Response
 -keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
+# 保留泛型签名（Retrofit/Moshi 反射依赖）
+-keepattributes Signature
+# 保留带 Retrofit 注解的服务接口方法（VidHubApi）
+-keep,allowobfuscation,allowshrinking interface * {
+    @retrofit2.http.* <methods>;
+}
 
 # Kotlin Metadata
 -keep class kotlin.Metadata { *; }

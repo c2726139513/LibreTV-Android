@@ -1,15 +1,16 @@
-name: Build APK
+name: Build Signed APK
 
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Assemble Debug APK
+    name: Assemble Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -28,12 +29,46 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      # 从 secrets 解码签名 keystore（secrets 未配置时跳过，release 将不签名）
+      - name: Decode keystore
+        id: keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ runner.temp }}/keystore.jks"
+            echo "KEYSTORE_PATH=${{ runner.temp }}/keystore.jks" >> "$GITHUB_ENV"
+          fi
 
-      - name: Upload Debug APK
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: vidhub-android-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: vidhub-android-release
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
+
+  # 打 v* 标签时自动创建 GitHub Release 并附带 APK
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vidhub-android-release
+          path: apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apk/*.apk
+          generate_release_notes: true

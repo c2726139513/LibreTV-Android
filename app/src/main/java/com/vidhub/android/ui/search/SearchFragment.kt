@@ -1,6 +1,7 @@
 package com.vidhub.android.ui.search
 
 import android.os.Bundle
+import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.leanback.app.SearchSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
@@ -22,6 +23,9 @@ import kotlinx.coroutines.launch
 
 /**
  * 搜索页：输入关键词（500ms 防抖）→ 聚合当前服务器所有数据源的结果。
+ *
+ * 渲染采用增量追加：多源结果陆续返回时只 append 新条目，
+ * 不重建适配器，避免滚动/焦点位置被重置回第一项。
  */
 @AndroidEntryPoint
 class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider {
@@ -30,6 +34,16 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
 
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private lateinit var resultsAdapter: ArrayObjectAdapter
+    private lateinit var resultsRow: ListRow
+    private val resultsHeader = HeaderItem(ROW_RESULTS, "")
+
+    /** 当前展示模式：空 / 提示 / 结果列表 */
+    private enum class Mode { NONE, HINT, RESULTS }
+    private var mode = Mode.NONE
+
+    /** resultsAdapter 中已渲染的条目数（增量追加指针） */
+    private var renderedCount = 0
+    private var hintText: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +56,7 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         })
     }
 
-    override fun onViewCreated(view: android.view.View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         observeState()
     }
@@ -68,31 +82,65 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
     }
 
     private fun render(state: SearchViewModel.SearchUiState) {
-        resultsAdapter.clear()
-        state.results.forEach { resultsAdapter.add(it) }
+        // 新搜索：结果列表被重建（长度回退）→ 清空重来
+        if (state.results.size < renderedCount) {
+            resultsAdapter.clear()
+            renderedCount = 0
+        }
 
-        rowsAdapter.clear()
         when {
-            state.noServer -> rowsAdapter.add(hintRow(getString(R.string.search_no_server)))
-            state.authFailed -> rowsAdapter.add(hintRow(getString(R.string.search_auth_failed)))
-            state.results.isNotEmpty() -> {
-                val suffix = if (state.searching) "…" else ""
-                rowsAdapter.add(
-                    ListRow(
-                        HeaderItem(ROW_RESULTS, "${getString(R.string.app_name)} · ${state.results.size}$suffix"),
-                        resultsAdapter,
-                    )
-                )
-            }
-            state.hasSearched && !state.searching ->
-                rowsAdapter.add(hintRow(getString(R.string.search_no_result)))
+            state.noServer -> showHint(getString(R.string.search_no_server))
+            state.authFailed -> showHint(getString(R.string.search_auth_failed))
+            state.results.isNotEmpty() -> showResults(state)
+            state.hasSearched && !state.searching -> showHint(getString(R.string.search_no_result))
+            else -> showHint(null)
         }
     }
 
-    private fun hintRow(text: String): ListRow {
+    /** 结果模式：行结构只建一次，后续仅增量追加 + 更新表头计数 */
+    private fun showResults(state: SearchViewModel.SearchUiState) {
+        if (mode != Mode.RESULTS) {
+            rowsAdapter.clear()
+            if (!::resultsRow.isInitialized) {
+                resultsRow = ListRow(resultsHeader, resultsAdapter)
+            }
+            rowsAdapter.add(resultsRow)
+            mode = Mode.RESULTS
+            hintText = null
+        }
+
+        // 只追加新到达的条目，已有条目与滚动位置不动
+        while (renderedCount < state.results.size) {
+            resultsAdapter.add(state.results[renderedCount])
+            renderedCount++
+        }
+
+        val suffix = if (state.searching) "…" else ""
+        val newName = "搜索结果（${state.results.size}）$suffix"
+        if (resultsHeader.name != newName) {
+            resultsHeader.name = newName
+            val index = rowsAdapter.indexOf(resultsRow)
+            if (index >= 0) rowsAdapter.notifyItemRangeChanged(index, 1)
+        }
+    }
+
+    /** 提示模式（或无内容）：提示文本不变时不重复重建 */
+    private fun showHint(text: String?) {
+        if (text == null) {
+            if (mode != Mode.NONE) {
+                mode = Mode.NONE
+                hintText = null
+                rowsAdapter.clear()
+            }
+            return
+        }
+        if (mode == Mode.HINT && hintText == text) return
+        mode = Mode.HINT
+        hintText = text
+        rowsAdapter.clear()
         val adapter = ArrayObjectAdapter(TextCardPresenter())
         adapter.add(TextCard(id = "hint", title = text))
-        return ListRow(HeaderItem(ROW_HINT, ""), adapter)
+        rowsAdapter.add(ListRow(HeaderItem(ROW_HINT, ""), adapter))
     }
 
     companion object {

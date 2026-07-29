@@ -176,8 +176,24 @@ VideoRepository 读取活跃配置，切换 API 目标地址
 # 克隆后用 Android Studio 打开，Sync Gradle → 连接设备 → Run
 
 # 命令行构建：
-./gradlew assembleDebug        # 输出 app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug        # 开发调试包
+./gradlew assembleRelease      # 发布包（配置签名环境变量时自动签名）
 ```
+
+### GitHub Actions 签名构建
+
+仓库已内置 `.github/workflows/build.yml`：push 即构建 release APK 并上传 artifact；打 `v*` 标签自动创建 GitHub Release。
+
+签名通过仓库 Secrets 注入（与旧版一致，已配置过则无需改动）：
+
+| Secret | 说明 |
+|---|---|
+| `KEYSTORE_BASE64` | keystore 文件的 base64（`base64 -i keystore.jks`） |
+| `KEYSTORE_PASSWORD` | keystore 密码 |
+| `KEY_ALIAS` | 密钥别名 |
+| `KEY_PASSWORD` | 密钥密码 |
+
+未配置 Secrets 时 release 构建自动降级为未签名 APK，不会构建失败。
 
 **首次使用：**
 1. 首页 → 「+ 添加服务器」→ 输入名称、VidHub 部署地址、PASSWORD
