@@ -36,7 +36,6 @@ object Constants {
 
     // ---- SharedPreferences / DataStore 名称 ----
     const val PREFS_SECURE_SERVERS = "vidhub_secure_servers"
-    const val DATASTORE_SETTINGS = "vidhub_settings"
     const val DATASTORE_HISTORY = "vidhub_history"
     const val DATASTORE_FAVORITES = "vidhub_favorites"
     const val DATASTORE_SOURCES_CACHE = "vidhub_sources_cache"

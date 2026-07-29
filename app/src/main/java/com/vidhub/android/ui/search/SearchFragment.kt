@@ -39,7 +39,6 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
     private lateinit var resultsRow: ListRow
 
     /** 标题行（"搜索结果（…）"），位于结果行上方，扁平文本不可聚焦 */
-    private var titleRow: ListRow? = null
     private var titleAdapter: ArrayObjectAdapter? = null
     private var titleText: String? = null
 
@@ -113,9 +112,7 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
                 resultsRow = ListRow(resultsAdapter)
             }
             // 标题行在上，结果行在下
-            val newTitleRow = ListRow(buildTitleAdapter(titleOf(state)))
-            titleRow = newTitleRow
-            rowsAdapter.add(newTitleRow)
+            rowsAdapter.add(ListRow(buildTitleAdapter(titleOf(state))))
             rowsAdapter.add(resultsRow)
             mode = Mode.RESULTS
             hintText = null
@@ -157,7 +154,6 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         if (mode == Mode.HINT && hintText == text) return
         mode = if (text == null) Mode.NONE else Mode.HINT
         hintText = text
-        titleRow = null
         titleAdapter = null
         titleText = null
         rowsAdapter.clear()
