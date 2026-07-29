@@ -26,8 +26,8 @@ import kotlinx.coroutines.launch
  * 防回弹设计（多源结果陆续返回时不重置滚动位置）：
  * 1. 结果行使用 [StableListRowPresenter]，关闭条目动画与焦点对齐；
  * 2. 每批追加后校验网格首可见位置，被重置则修复；
- * 3. 搜索中在结果行下方挂状态行显示"搜索中…已找到 N 部"，完成后移除，
- *    状态行的增删不影响结果行的横向滚动。
+ * 3. 搜索中在结果行下方挂状态行显示"搜索中…已找到 N 部"，完成后切换为
+ *    "搜索完成，共找到 N 部"（保留），状态行更新不影响结果行横向滚动。
  */
 @AndroidEntryPoint
 class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider {
@@ -143,11 +143,11 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
             }
         }
 
-        // 状态行维护
+        // 状态行维护：搜索中显示实时计数，完成后切换为总计数（保留不消失）
         if (state.searching) {
             updateStatusRow("搜索中… 已找到 ${state.results.size} 部")
         } else {
-            removeStatusRow()
+            updateStatusRow("搜索完成，共找到 ${state.results.size} 部")
         }
     }
 
@@ -166,13 +166,6 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
             statusAdapter?.add(TextCard(id = "status", title = text))
             statusText = text
         }
-    }
-
-    private fun removeStatusRow() {
-        statusRow?.let { rowsAdapter.remove(it) }
-        statusRow = null
-        statusAdapter = null
-        statusText = null
     }
 
     /** 纯提示模式（无结果网格）；文本不变时不重复重建 */
