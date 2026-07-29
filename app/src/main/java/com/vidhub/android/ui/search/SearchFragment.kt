@@ -35,7 +35,7 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private lateinit var resultsAdapter: ArrayObjectAdapter
     private lateinit var resultsRow: ListRow
-    private val resultsHeader = HeaderItem(ROW_RESULTS, "")
+    private val resultsHeader = HeaderItem(ROW_RESULTS, "搜索结果")
 
     /** 当前展示模式：空 / 提示 / 结果列表 */
     private enum class Mode { NONE, HINT, RESULTS }
@@ -97,7 +97,7 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         }
     }
 
-    /** 结果模式：行结构只建一次，后续仅增量追加 + 更新表头计数 */
+    /** 结果模式：行结构只建一次，后续仅增量追加（表头固定，HeaderItem 名字构造后不可改） */
     private fun showResults(state: SearchViewModel.SearchUiState) {
         if (mode != Mode.RESULTS) {
             rowsAdapter.clear()
@@ -113,14 +113,6 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         while (renderedCount < state.results.size) {
             resultsAdapter.add(state.results[renderedCount])
             renderedCount++
-        }
-
-        val suffix = if (state.searching) "…" else ""
-        val newName = "搜索结果（${state.results.size}）$suffix"
-        if (resultsHeader.name != newName) {
-            resultsHeader.name = newName
-            val index = rowsAdapter.indexOf(resultsRow)
-            if (index >= 0) rowsAdapter.notifyItemRangeChanged(index, 1)
         }
     }
 
