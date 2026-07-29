@@ -124,10 +124,11 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
             hintText = null
         }
 
-        // 追加前记录首可见位置（用于追加后的回弹校验修复）
+        // 追加前记录首可见位置（用于追加后的回弹校验修复）。
+        // 用 RecyclerView 通用 API：最左可见子视图 → 适配器位置。
         val gridView = stablePresenter.resultsGridView
-        val layoutManager = gridView?.layoutManager
-        val prevFirstVisible = layoutManager?.findFirstVisibleItemPosition() ?: -1
+        val prevFirstVisible = gridView?.getChildAt(0)
+            ?.let { gridView.getChildAdapterPosition(it) } ?: -1
 
         while (renderedCount < state.results.size) {
             resultsAdapter.add(state.results[renderedCount])
@@ -135,9 +136,11 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         }
 
         // 追加后校验：若首可见位置被重置则恢复（正常调优后不会触发，仅兜底）
-        if (gridView != null && layoutManager != null && prevFirstVisible > 0) {
+        if (gridView != null && prevFirstVisible > 0) {
             gridView.post {
-                if (layoutManager.findFirstVisibleItemPosition() != prevFirstVisible) {
+                val nowFirstVisible = gridView.getChildAt(0)
+                    ?.let { gridView.getChildAdapterPosition(it) } ?: -1
+                if (nowFirstVisible != prevFirstVisible) {
                     gridView.scrollToPosition(prevFirstVisible)
                 }
             }
