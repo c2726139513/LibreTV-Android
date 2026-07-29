@@ -5,7 +5,6 @@ import android.view.View
 import androidx.fragment.app.viewModels
 import androidx.leanback.app.SearchSupportFragment
 import androidx.leanback.widget.ArrayObjectAdapter
-import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.lifecycle.Lifecycle
@@ -23,27 +22,26 @@ import kotlinx.coroutines.launch
 /**
  * 搜索页：输入关键词（500ms 防抖）→ 聚合当前服务器所有数据源，结果流式上屏。
  *
- * 防回弹设计（多源结果陆续返回时不重置滚动位置）：
- * 1. 结果行使用 [StableListRowPresenter]，关闭条目动画与焦点对齐；
- * 2. 每批追加后校验网格首可见位置，被重置则修复；
- * 3. 搜索中在结果行下方挂状态行显示"搜索中…已找到 N 部"，完成后切换为
- *    "搜索完成，共找到 N 部"（保留），状态行更新不影响结果行横向滚动。
+ * 结构（行 header 已被 [StableListRowPresenter] 隐藏）：
+ *   [标题行]  "搜索结果（搜索中…已找到 N 部）" → 完成后 "搜索结果（搜索完成，共找到 N 部）"
+ *   [结果行]  视频卡片，流式增量追加
+ *
+ * 防回弹：结果网格关闭条目动画、焦点对齐，焦点滚动策略为最小滚动（见 StableListRowPresenter），
+ * 图片加载/数据追加触发的布局不会拉动滚动位置。
  */
 @AndroidEntryPoint
 class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResultProvider {
 
     private val viewModel: SearchViewModel by viewModels()
 
-    private lateinit var stablePresenter: StableListRowPresenter
     private lateinit var rowsAdapter: ArrayObjectAdapter
     private lateinit var resultsAdapter: ArrayObjectAdapter
     private lateinit var resultsRow: ListRow
-    private val resultsHeader = HeaderItem(ROW_RESULTS, "搜索结果")
 
-    /** 搜索状态行（"搜索中…已找到 N 部"），搜索完成后移除 */
-    private var statusRow: ListRow? = null
-    private var statusAdapter: ArrayObjectAdapter? = null
-    private var statusText: String? = null
+    /** 标题行（"搜索结果（…）"），位于结果行上方，扁平文本不可聚焦 */
+    private var titleRow: ListRow? = null
+    private var titleAdapter: ArrayObjectAdapter? = null
+    private var titleText: String? = null
 
     /** 当前展示模式：空 / 提示 / 结果列表 */
     private enum class Mode { NONE, HINT, RESULTS }
@@ -56,10 +54,8 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        stablePresenter = StableListRowPresenter()
         resultsAdapter = ArrayObjectAdapter(VideoCardPresenter())
-        stablePresenter.resultsAdapter = resultsAdapter
-        rowsAdapter = ArrayObjectAdapter(stablePresenter)
+        rowsAdapter = ArrayObjectAdapter(StableListRowPresenter())
 
         setSearchResultProvider(this)
         setOnItemViewClickedListener(OnItemViewClickedListener { _, item, _, _ ->
@@ -109,66 +105,51 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         }
     }
 
-    /** 流式展示：行结构只建一次，结果增量追加，状态行随搜索进度更新 */
+    /** 流式展示：行结构只建一次，结果增量追加，标题行随进度更新 */
     private fun showStreaming(state: SearchViewModel.SearchUiState) {
         if (mode != Mode.RESULTS) {
             rowsAdapter.clear()
-            statusRow = null
-            statusAdapter = null
-            statusText = null
             if (!::resultsRow.isInitialized) {
-                resultsRow = ListRow(resultsHeader, resultsAdapter)
+                resultsRow = ListRow(resultsAdapter)
             }
+            // 标题行在上，结果行在下
+            val newTitleRow = ListRow(buildTitleAdapter(titleOf(state)))
+            titleRow = newTitleRow
+            rowsAdapter.add(newTitleRow)
             rowsAdapter.add(resultsRow)
             mode = Mode.RESULTS
             hintText = null
+        } else {
+            // 标题文本随进度更新（搜索中…已找到 N 部 → 搜索完成，共找到 N 部）
+            val newTitle = titleOf(state)
+            if (titleText != newTitle) {
+                titleAdapter?.clear()
+                titleAdapter?.add(TextCard(id = "title", title = newTitle, flat = true))
+                titleText = newTitle
+            }
         }
 
-        // 追加前记录首可见位置（用于追加后的回弹校验修复）。
-        // 用 RecyclerView 通用 API：最左可见子视图 → 适配器位置。
-        val gridView = stablePresenter.resultsGridView
-        val prevFirstVisible = gridView?.getChildAt(0)
-            ?.let { gridView.getChildAdapterPosition(it) } ?: -1
-
+        // 结果增量追加（StableListRowPresenter 已关闭动画与对齐，插入无副作用）
         while (renderedCount < state.results.size) {
             resultsAdapter.add(state.results[renderedCount])
             renderedCount++
         }
+    }
 
-        // 追加后校验：若首可见位置被重置则恢复（正常调优后不会触发，仅兜底）
-        if (gridView != null && prevFirstVisible > 0) {
-            gridView.post {
-                val nowFirstVisible = gridView.getChildAt(0)
-                    ?.let { gridView.getChildAdapterPosition(it) } ?: -1
-                if (nowFirstVisible != prevFirstVisible) {
-                    gridView.scrollToPosition(prevFirstVisible)
-                }
-            }
-        }
-
-        // 状态行维护：搜索中显示实时计数，完成后切换为总计数（保留不消失）
-        if (state.searching) {
-            updateStatusRow("搜索中… 已找到 ${state.results.size} 部")
+    private fun titleOf(state: SearchViewModel.SearchUiState): String {
+        return if (state.searching) {
+            "搜索结果（搜索中… 已找到 ${state.results.size} 部）"
         } else {
-            updateStatusRow("搜索完成，共找到 ${state.results.size} 部")
+            "搜索结果（搜索完成，共找到 ${state.results.size} 部）"
         }
     }
 
-    /** 状态行：挂在结果行下方；文本不变时不重建 */
-    private fun updateStatusRow(text: String) {
-        if (statusRow == null) {
-            val adapter = ArrayObjectAdapter(TextCardPresenter())
-            adapter.add(TextCard(id = "status", title = text))
-            val row = ListRow(HeaderItem(ROW_STATUS, ""), adapter)
-            statusAdapter = adapter
-            statusRow = row
-            statusText = text
-            rowsAdapter.add(row)
-        } else if (statusText != text) {
-            statusAdapter?.clear()
-            statusAdapter?.add(TextCard(id = "status", title = text))
-            statusText = text
-        }
+    private fun buildTitleAdapter(text: String): ArrayObjectAdapter {
+        val adapter = ArrayObjectAdapter(TextCardPresenter())
+        adapter.add(TextCard(id = "title", title = text, flat = true))
+        titleAdapter = adapter
+        titleText = text
+        return adapter
     }
 
     /** 纯提示模式（无结果网格）；文本不变时不重复重建 */
@@ -176,20 +157,14 @@ class SearchFragment : SearchSupportFragment(), SearchSupportFragment.SearchResu
         if (mode == Mode.HINT && hintText == text) return
         mode = if (text == null) Mode.NONE else Mode.HINT
         hintText = text
-        statusRow = null
-        statusAdapter = null
-        statusText = null
+        titleRow = null
+        titleAdapter = null
+        titleText = null
         rowsAdapter.clear()
         if (text != null) {
             val adapter = ArrayObjectAdapter(TextCardPresenter())
             adapter.add(TextCard(id = "hint", title = text))
-            rowsAdapter.add(ListRow(HeaderItem(ROW_HINT, ""), adapter))
+            rowsAdapter.add(ListRow(adapter))
         }
-    }
-
-    companion object {
-        private const val ROW_RESULTS = 0L
-        private const val ROW_HINT = 1L
-        private const val ROW_STATUS = 2L
     }
 }

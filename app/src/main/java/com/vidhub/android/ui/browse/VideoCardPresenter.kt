@@ -32,7 +32,6 @@ class VideoCardPresenter : Presenter() {
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
         val video = item as VideoItem
         val cardView = viewHolder.view as ImageCardView
-        val context = cardView.context
 
         cardView.titleText = video.title
         cardView.contentText = listOfNotNull(
@@ -40,13 +39,11 @@ class VideoCardPresenter : Presenter() {
             video.sourceName.takeIf { it.isNotBlank() },
         ).joinToString(" · ").ifEmpty { null }
 
-        val placeholder = ContextCompat.getDrawable(context, R.drawable.poster_placeholder)
-        cardView.mainImage = placeholder
-        if (!video.coverUrl.isNullOrBlank()) {
-            cardView.mainImageView.load(video.coverUrl) {
-                placeholder(R.drawable.poster_placeholder)
-                error(R.drawable.poster_placeholder)
-            }
+        // 占位/失败/空地址统一用占位图，由 Coil 一次性处理
+        cardView.mainImageView.load(video.coverUrl) {
+            placeholder(R.drawable.poster_placeholder)
+            error(R.drawable.poster_placeholder)
+            fallback(R.drawable.poster_placeholder)
         }
     }
 
