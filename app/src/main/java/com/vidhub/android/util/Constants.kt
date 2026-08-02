@@ -34,8 +34,8 @@ object Constants {
     /** 缓冲上限：达到该值播放器停止下载 */
     const val PLAYER_MAX_BUFFER_MS = 120_000
 
-    /** 首次播放前需要缓冲的媒体时长 */
-    const val PLAYER_BUFFER_FOR_PLAYBACK_MS = 10_000
+    /** 首次播放前需要缓冲的媒体时长（对齐 jellyfin EXTRA_LARGE，避免首播/seek 等待过久） */
+    const val PLAYER_BUFFER_FOR_PLAYBACK_MS = 5_000
 
     /** 卡顿（re-buffer）后恢复播放前需要缓冲的媒体时长 */
     const val PLAYER_BUFFER_FOR_REBUFFER_MS = 15_000
