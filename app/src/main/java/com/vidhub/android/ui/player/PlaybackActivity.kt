@@ -11,6 +11,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.vidhub.android.R
@@ -81,8 +83,22 @@ class PlaybackActivity : FragmentActivity() {
         super.onStop()
     }
 
+    @OptIn(UnstableApi::class)
     private fun initPlayer() {
-        val exo = ExoPlayer.Builder(this).build()
+        // 抗网络抖动：加大缓冲窗口与卡顿恢复阈值，字节上限硬顶内存。
+        // 刻意不开 setPrioritizeTimeOverSizeThresholds —— 1.3.1 无 OOM 保护，开了内存会失控。
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                Constants.PLAYER_MIN_BUFFER_MS,
+                Constants.PLAYER_MAX_BUFFER_MS,
+                Constants.PLAYER_BUFFER_FOR_PLAYBACK_MS,
+                Constants.PLAYER_BUFFER_FOR_REBUFFER_MS,
+            )
+            .setTargetBufferBytes(Constants.PLAYER_TARGET_BUFFER_BYTES)
+            .build()
+        val exo = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
+            .build()
         player = exo
         playerView.player = exo
         playerView.keepScreenOn = true

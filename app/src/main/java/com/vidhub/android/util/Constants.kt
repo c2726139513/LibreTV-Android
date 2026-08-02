@@ -27,6 +27,23 @@ object Constants {
     /** 播放器自动保存进度间隔（毫秒） */
     const val PLAYER_PROGRESS_SAVE_INTERVAL_MS = 10_000L
 
+    // ---- 播放器缓冲（抗网络抖动，供 DefaultLoadControl 使用） ----
+    /** 缓冲下限：低于该值播放器继续下载 */
+    const val PLAYER_MIN_BUFFER_MS = 60_000
+
+    /** 缓冲上限：达到该值播放器停止下载 */
+    const val PLAYER_MAX_BUFFER_MS = 120_000
+
+    /** 首次播放前需要缓冲的媒体时长 */
+    const val PLAYER_BUFFER_FOR_PLAYBACK_MS = 10_000
+
+    /** 卡顿（re-buffer）后恢复播放前需要缓冲的媒体时长 */
+    const val PLAYER_BUFFER_FOR_REBUFFER_MS = 15_000
+
+    /** 内存缓冲字节上限（硬顶，约 100MB）。不开启 prioritizeTimeOverSizeThresholds，
+     *  播放器达到字节上限即停止加载，保证内存占用可预测。 */
+    const val PLAYER_TARGET_BUFFER_BYTES = 100 * 1024 * 1024
+
     // ---- Intent Extra ----
     const val EXTRA_VIDEO_ITEM = "extra_video_item"
     const val EXTRA_EPISODE_INDEX = "extra_episode_index"
